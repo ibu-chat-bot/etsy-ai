@@ -1,0 +1,94 @@
+{
+  "id": "beauty-promo-01",
+  "name": "Beauty Promo Post",
+  "category": "beauty",
+  "width": 1080,
+  "height": 1080,
+  "thumbnail": "/templates/beauty-promo-01.png",
+  "editableFields": ["headline", "subtext", "cta", "background", "border-accent", "cta-bg"],
+  "fabricJSON": {
+    "version": "5.3.0",
+    "objects": [
+      {
+        "type": "rect",
+        "left": 0,
+        "top": 0,
+        "width": 1080,
+        "height": 1080,
+        "fill": "#0D0D0D",
+        "selectable": false,
+        "id": "background"
+      },
+      {
+        "type": "rect",
+        "left": 40,
+        "top": 40,
+        "width": 1000,
+        "height": 1000,
+        "fill": "transparent",
+        "stroke": "#00f5c4",
+        "strokeWidth": 4,
+        "selectable": false,
+        "id": "border-accent"
+      },
+      {
+        "type": "text",
+        "left": 540,
+        "top": 320,
+        "text": "EXPERIENCE LUXURY",
+        "fontSize": 72,
+        "fontFamily": "Playfair Display",
+        "fontWeight": "bold",
+        "fill": "#FFFFFF",
+        "textAlign": "center",
+        "originX": "center",
+        "originY": "center",
+        "selectable": true,
+        "id": "headline"
+      },
+      {
+        "type": "text",
+        "left": 540,
+        "top": 440,
+        "text": "Premium Aesthetic Clinic",
+        "fontSize": 32,
+        "fontFamily": "Inter",
+        "fill": "#00f5c4",
+        "textAlign": "center",
+        "originX": "center",
+        "originY": "center",
+        "selectable": true,
+        "id": "subtext"
+      },
+      {
+        "type": "rect",
+        "left": 540,
+        "top": 820,
+        "width": 400,
+        "height": 70,
+        "rx": 35,
+        "ry": 35,
+        "fill": "#00f5c4",
+        "originX": "center",
+        "originY": "center",
+        "selectable": false,
+        "id": "cta-bg"
+      },
+      {
+        "type": "text",
+        "left": 540,
+        "top": 820,
+        "text": "BOOK NOW",
+        "fontSize": 24,
+        "fontFamily": "Inter",
+        "fontWeight": "bold",
+        "fill": "#000000",
+        "textAlign": "center",
+        "originX": "center",
+        "originY": "center",
+        "selectable": true,
+        "id": "cta"
+      }
+    ]
+  }
+}

@@ -105,3 +105,13 @@ export interface GeneratedAsset {
   promptUsed?: string;
   createdAt: string;
 }
+
+export interface EditorToken {
+  token: string;
+  templateId: string;
+  purchaseId: string;
+  usedAt: string | null;
+  expiresAt: string;
+  downloadCount: number;
+  createdAt: string;
+}

@@ -1,12 +1,13 @@
 import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
-import { Project, SEOAssets, VisualSystem, ContentBlueprint, PromptOutput, Settings, User, CanvaConnection, CanvaProject, GeneratedAsset } from '@/types';
 import fs from 'fs/promises';
 import path from 'path';
 
 // Detect if Supabase is configured via environment variables
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+import { User, Project, SEOAssets, VisualSystem, ContentBlueprint, PromptOutput, Settings, CanvaConnection, CanvaProject, GeneratedAsset, EditorToken } from '@/types';
+
 const isSupabaseConfigured = !!(supabaseUrl && supabaseKey);
 
 const supabase = isSupabaseConfigured ? createClient(supabaseUrl, supabaseKey) : null;
@@ -23,10 +24,12 @@ interface LocalDB {
   canva_connections: CanvaConnection[];
   canva_projects: CanvaProject[];
   generated_assets: GeneratedAsset[];
+  editor_tokens?: EditorToken[];
 }
 
 // Default state of local database
 const DEFAULT_DB: LocalDB = {
+  editor_tokens: [],
   users: [
     {
       id: 'admin-id',
@@ -699,5 +702,47 @@ export const db = {
     local.generated_assets.push(newAsset);
     await writeLocalDB(local);
     return newAsset;
+  },
+
+  // --- EDITOR TOKENS ---
+  async getEditorToken(token: string): Promise<EditorToken | null> {
+    if (supabase) {
+      const { data, error } = await supabase.from('editor_tokens').select('*').eq('token', token).single();
+      if (!error && data) return data as EditorToken;
+      return null;
+    }
+    const local = await readLocalDB();
+    if (!local.editor_tokens) {
+      local.editor_tokens = [];
+    }
+    const tokenObj = local.editor_tokens.find((t) => t.token === token);
+    return tokenObj || null;
+  },
+
+  async saveEditorToken(tokenData: EditorToken): Promise<EditorToken> {
+    if (supabase) {
+      await supabase.from('editor_tokens').upsert({
+        token: tokenData.token,
+        template_id: tokenData.templateId,
+        purchase_id: tokenData.purchaseId,
+        used_at: tokenData.usedAt,
+        expires_at: tokenData.expiresAt,
+        download_count: tokenData.downloadCount,
+        created_at: tokenData.createdAt
+      });
+      return tokenData;
+    }
+    const local = await readLocalDB();
+    if (!local.editor_tokens) {
+      local.editor_tokens = [];
+    }
+    const index = local.editor_tokens.findIndex((t) => t.token === tokenData.token);
+    if (index !== -1) {
+      local.editor_tokens[index] = tokenData;
+    } else {
+      local.editor_tokens.push(tokenData);
+    }
+    await writeLocalDB(local);
+    return tokenData;
   }
 };

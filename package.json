@@ -11,6 +11,7 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.106.1",
     "@types/jszip": "^3.4.0",
+    "fabric": "^5.5.2",
     "jszip": "^3.10.1",
     "lucide-react": "^1.16.0",
     "next": "16.2.6",
@@ -21,6 +22,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/fabric": "^5.3.11",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
