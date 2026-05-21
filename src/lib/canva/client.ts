@@ -834,12 +834,11 @@ export class CanvaClient {
         // Create design pre-loaded with the uploaded SVG asset
         const body: Record<string, unknown> = assetId
           ? {
-              type: 'type_and_asset',
+              design_type: { type: 'custom', width, height },
               asset_id: assetId,
               title: slideTitle
             }
           : {
-              type: 'type_and_asset',
               design_type: { type: 'custom', width, height },
               title: slideTitle
             };
@@ -852,18 +851,24 @@ export class CanvaClient {
         });
         const { ok, status, data } = await logCanvaResponse(res, endpoint);
 
+        console.log('[DEBUG] Canva POST /designs response:', JSON.stringify(data, null, 2));
+
         if (!ok) {
           console.error(`[Canva] ❌ Design creation failed for slide ${i + 1}: ${data?.message || data?.error || status}`);
           // Fallback path: plain custom design if asset path rejected
           if (assetId) {
             console.log(`[Canva] Retrying slide ${i + 1} as blank template fallback...`);
-            const fbBody = { type: 'type_and_asset', design_type: { type: 'custom', width, height }, title: slideTitle };
+            const fbBody = {
+              design_type: { type: 'custom', width, height },
+              title: slideTitle
+            };
             const fbRes = await fetch(endpoint, {
               method: 'POST',
               headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
               body: JSON.stringify(fbBody)
             });
             const fbResult = await logCanvaResponse(fbRes, endpoint);
+            console.log('[DEBUG] Canva fallback retry response:', JSON.stringify(fbResult.data, null, 2));
             if (fbResult.ok) {
               const d = fbResult.data?.design || fbResult.data;
               const designId = d.id;
