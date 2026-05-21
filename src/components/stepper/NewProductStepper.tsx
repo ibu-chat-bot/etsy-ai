@@ -329,6 +329,11 @@ export function NewProductStepper() {
 
       addLog('Administrative digital strategy packet compiled.');
       addLog('ETSY BRANDING PACKAGE READY FOR DOWNLOAD!');
+      addLog('Redirecting to your persistent project workspace in 1.5 seconds...');
+      
+      setTimeout(() => {
+        router.push(`/projects/${projectId}`);
+      }, 1500);
     } catch (err: any) {
       addLog(`[ERROR] ${err.message}`);
     } finally {
@@ -1167,21 +1172,41 @@ Etsy Section Categories: ${shopBranding?.categorySuggestions?.join(', ') || ''}
               </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
-              <button
-                onClick={downloadStrategyTXT}
-                className="w-full sm:w-auto bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-bold text-sm px-8 py-3.5 rounded-xl shadow-lg shadow-emerald-500/10 hover:shadow-emerald-500/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
-              >
-                <Download className="w-5 h-5" />
-                <span>Download Strategy Bundle (TXT)</span>
-              </button>
+            <div className="flex flex-col gap-4 pt-4 w-full max-w-xl mx-auto">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <button
+                  onClick={() => router.push(`/projects/${projectId}?tab=canva`)}
+                  className="w-full bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-extrabold text-xs py-3.5 px-4 rounded-xl shadow-lg shadow-indigo-500/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                >
+                  <Sparkles className="w-4 h-4 text-violet-200" />
+                  <span>🚀 GO TO CANVA HUB &amp; DEPLOY</span>
+                </button>
 
-              <button
-                onClick={() => router.push('/dashboard')}
-                className="w-full sm:w-auto bg-white/5 hover:bg-white/10 text-white font-semibold text-xs px-6 py-4 rounded-xl border border-white/5 hover:border-white/10 transition-colors"
-              >
-                Return to Dashboard
-              </button>
+                <button
+                  onClick={() => router.push(`/projects/${projectId}`)}
+                  className="w-full bg-slate-900 hover:bg-slate-850 text-white font-bold text-xs py-3.5 px-4 rounded-xl border border-white/10 hover:border-white/15 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                >
+                  <Layers className="w-4 h-4 text-emerald-400" />
+                  <span>📂 OPEN PROJECT STRATEGY</span>
+                </button>
+              </div>
+
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+                <button
+                  onClick={downloadStrategyTXT}
+                  className="w-full sm:w-auto bg-emerald-500/10 hover:bg-emerald-500/15 border border-emerald-500/20 text-emerald-400 font-bold text-xs px-5 py-2.5 rounded-lg transition-all flex items-center justify-center gap-1.5"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Download Strategy (TXT)</span>
+                </button>
+
+                <button
+                  onClick={() => router.push('/dashboard')}
+                  className="w-full sm:w-auto bg-white/5 hover:bg-white/10 text-white font-medium text-xs px-5 py-2.5 rounded-lg border border-white/5 transition-all"
+                >
+                  Return to Dashboard
+                </button>
+              </div>
             </div>
           </GlassCard>
         </div>

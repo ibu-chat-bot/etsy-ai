@@ -85,6 +85,13 @@ export default function ProjectDetailPage({
 
   useEffect(() => {
     loadProjectDetails();
+    if (typeof window !== 'undefined') {
+      const searchParams = new URLSearchParams(window.location.search);
+      const tab = searchParams.get('tab');
+      if (tab && ['strategy', 'seo', 'styling', 'layouts', 'images', 'canva', 'package'].includes(tab)) {
+        setActiveTab(tab as any);
+      }
+    }
   }, [projectId]);
 
   // Extract parsed strategic content helpers
