@@ -1,26 +1,39 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db/provider';
 
+// Whether each Canva credential is sourced from environment variables
+const envFlags = {
+  canvaClientId: !!process.env.CANVA_CLIENT_ID,
+  canvaClientSecret: !!process.env.CANVA_CLIENT_SECRET,
+  canvaRedirectUri: !!process.env.CANVA_REDIRECT_URI,
+  openaiApiKey: !!process.env.OPENAI_API_KEY,
+};
+
 // GET: Return current settings
 export async function GET() {
   try {
     const settings = await db.getSettings();
-    
-    // Mask OpenAI key for client-side safety, but tell if it is configured
+
+    // Mask secrets for client-side safety
     const hasKey = !!settings.openaiApiKey;
     const maskedKey = settings.openaiApiKey
       ? `sk-...${settings.openaiApiKey.slice(-4)}`
+      : '';
+    const maskedSecret = settings.canvaClientSecret
+      ? `secret-...${settings.canvaClientSecret.slice(-4)}`
       : '';
 
     return NextResponse.json({
       success: true,
       settings: {
         ...settings,
-        openaiApiKey: maskedKey, // send only masked key
-        canvaClientSecret: settings.canvaClientSecret ? `secret-...${settings.canvaClientSecret.slice(-4)}` : ''
+        openaiApiKey: maskedKey,
+        canvaClientSecret: maskedSecret
       },
       hasOpenAIKey: hasKey,
-      isSupabase: db.isSupabase()
+      isSupabase: db.isSupabase(),
+      // Tell the frontend which fields are locked (env-configured)
+      envConfigured: envFlags
     });
   } catch (error: any) {
     return NextResponse.json(
@@ -36,17 +49,14 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { openaiApiKey, defaultLanguage, brandDefaults, canvaClientId, canvaClientSecret, canvaRedirectUri } = body;
 
-    // Load active settings to compare
     const currentSettings = await db.getSettings();
-
-    // Prepare updates
     const updates: any = {};
-    
-    // Only update OpenAI key if it is not the masked key and not empty
-    if (openaiApiKey && !openaiApiKey.startsWith('sk-...')) {
+
+    // Only update OpenAI key if not masked and not provided via env
+    if (!envFlags.openaiApiKey && openaiApiKey && !openaiApiKey.startsWith('sk-...')) {
       updates.openaiApiKey = openaiApiKey;
     }
-    
+
     if (defaultLanguage) {
       updates.defaultLanguage = defaultLanguage;
     }
@@ -58,11 +68,12 @@ export async function POST(request: Request) {
       };
     }
 
-    if (canvaClientId !== undefined) {
+    // Only allow saving Canva credentials if they are NOT coming from env vars
+    if (!envFlags.canvaClientId && canvaClientId !== undefined) {
       updates.canvaClientId = canvaClientId;
     }
 
-    if (canvaClientSecret !== undefined) {
+    if (!envFlags.canvaClientSecret && canvaClientSecret !== undefined) {
       if (canvaClientSecret && !canvaClientSecret.startsWith('secret-...')) {
         updates.canvaClientSecret = canvaClientSecret;
       } else if (canvaClientSecret === '') {
@@ -70,7 +81,7 @@ export async function POST(request: Request) {
       }
     }
 
-    if (canvaRedirectUri !== undefined) {
+    if (!envFlags.canvaRedirectUri && canvaRedirectUri !== undefined) {
       updates.canvaRedirectUri = canvaRedirectUri;
     }
 
@@ -84,7 +95,8 @@ export async function POST(request: Request) {
         canvaClientSecret: updated.canvaClientSecret ? `secret-...${updated.canvaClientSecret.slice(-4)}` : ''
       },
       hasOpenAIKey: !!updated.openaiApiKey,
-      isSupabase: db.isSupabase()
+      isSupabase: db.isSupabase(),
+      envConfigured: envFlags
     });
   } catch (error: any) {
     return NextResponse.json(

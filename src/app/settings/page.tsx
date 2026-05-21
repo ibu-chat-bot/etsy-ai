@@ -30,11 +30,16 @@ export default function SettingsPage() {
   const [canvaTokenType, setCanvaTokenType] = useState<string | null>(null);
   const [canvaTokenPreview, setCanvaTokenPreview] = useState<string | null>(null);
   const [canvaStatusDebug, setCanvaStatusDebug] = useState<string | null>(null);
-  const [canvaOauthState, setCanvaOauthState] = useState<string | null>(null);
   const [canvaConnecting, setCanvaConnecting] = useState(false);
   const [canvaConnectError, setCanvaConnectError] = useState<string | null>(null);
   const [canvaTesting, setCanvaTesting] = useState(false);
   const [canvaTestResult, setCanvaTestResult] = useState<any>(null);
+  const [envConfigured, setEnvConfigured] = useState<{
+    canvaClientId: boolean;
+    canvaClientSecret: boolean;
+    canvaRedirectUri: boolean;
+    openaiApiKey: boolean;
+  }>({ canvaClientId: false, canvaClientSecret: false, canvaRedirectUri: false, openaiApiKey: false });
 
   const [form, setForm] = useState<SettingsType>({
     id: 'settings',
@@ -47,20 +52,19 @@ export default function SettingsPage() {
     },
     canvaClientId: '',
     canvaClientSecret: '',
-    canvaRedirectUri: typeof window !== 'undefined' ? `${window.location.origin}/api/canva/callback` : 'http://127.0.0.1:3000/api/canva/callback'
+    canvaRedirectUri: 'http://127.0.0.1:3000/api/canva/callback'
   });
 
   // Load active settings from API
   const fetchSettings = async () => {
     try {
       const res = await fetch('/api/settings');
-      let loadedRedirectUri = 'http://127.0.0.1:3000/api/canva/callback';
-      if (typeof window !== 'undefined') {
-        loadedRedirectUri = `${window.location.origin}/api/canva/callback`;
-      }
-
       if (res.ok) {
         const data = await res.json();
+        // Track which fields are locked by env vars
+        if (data.envConfigured) {
+          setEnvConfigured(data.envConfigured);
+        }
         setForm({
           id: 'settings',
           openaiApiKey: data.settings.openaiApiKey || '',
@@ -72,7 +76,7 @@ export default function SettingsPage() {
           },
           canvaClientId: data.settings.canvaClientId || '',
           canvaClientSecret: data.settings.canvaClientSecret || '',
-          canvaRedirectUri: data.settings.canvaRedirectUri || loadedRedirectUri
+          canvaRedirectUri: data.settings.canvaRedirectUri || 'http://127.0.0.1:3000/api/canva/callback'
         });
       }
 
@@ -85,7 +89,6 @@ export default function SettingsPage() {
         setCanvaTokenType(statusData.tokenType || null);
         setCanvaTokenPreview(statusData.tokenPreview || null);
         setCanvaStatusDebug(statusData.debug || null);
-        setCanvaOauthState(statusData.oauthState || null);
       }
     } catch (err) {
       console.error('Failed to load settings', err);
@@ -312,27 +315,47 @@ export default function SettingsPage() {
               )}
             </div>
 
+            {/* Env vars banner */}
+            {(envConfigured.canvaClientId || envConfigured.canvaClientSecret) && (
+              <div className="p-3 bg-emerald-500/5 border border-emerald-500/20 rounded-xl text-xs text-emerald-300 flex items-center gap-2">
+                <span className="text-emerald-400 font-bold">🔒</span>
+                <span>Canva credentials are configured from <strong>environment variables</strong>. These fields are read-only.</span>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-gray-300 uppercase tracking-wider block">Canva Client ID</label>
+                <label className="text-xs font-semibold text-gray-300 uppercase tracking-wider block flex items-center gap-2">
+                  Canva Client ID
+                  {envConfigured.canvaClientId && (
+                    <span className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/25 text-emerald-400 uppercase tracking-widest">ENV</span>
+                  )}
+                </label>
                 <input
                   type="text"
                   placeholder="e.g. 123456789"
                   value={form.canvaClientId}
                   onChange={(e) => setForm({ ...form, canvaClientId: e.target.value })}
-                  className="w-full bg-slate-950/60 border border-gray-800 rounded-xl py-3 px-4 text-sm text-white focus:outline-none focus:border-emerald-500/60 transition-all font-mono"
+                  disabled={envConfigured.canvaClientId}
+                  className={`w-full bg-slate-950/60 border border-gray-800 rounded-xl py-3 px-4 text-sm text-white focus:outline-none focus:border-emerald-500/60 transition-all font-mono ${envConfigured.canvaClientId ? 'opacity-60 cursor-not-allowed' : ''}`}
                 />
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-gray-300 uppercase tracking-wider block">Canva Client Secret</label>
+                <label className="text-xs font-semibold text-gray-300 uppercase tracking-wider block flex items-center gap-2">
+                  Canva Client Secret
+                  {envConfigured.canvaClientSecret && (
+                    <span className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/25 text-emerald-400 uppercase tracking-widest">ENV</span>
+                  )}
+                </label>
                 <div className="relative">
                   <input
                     type={showCanvaSecret ? 'text' : 'password'}
                     placeholder="Enter Canva Developer Secret"
                     value={form.canvaClientSecret}
                     onChange={(e) => setForm({ ...form, canvaClientSecret: e.target.value })}
-                    className="w-full bg-slate-950/60 border border-gray-800 rounded-xl py-3 px-4 pr-10 text-sm text-white focus:outline-none focus:border-emerald-500/60 transition-all font-mono"
+                    disabled={envConfigured.canvaClientSecret}
+                    className={`w-full bg-slate-950/60 border border-gray-800 rounded-xl py-3 px-4 pr-10 text-sm text-white focus:outline-none focus:border-emerald-500/60 transition-all font-mono ${envConfigured.canvaClientSecret ? 'opacity-60 cursor-not-allowed' : ''}`}
                   />
                   <button
                     type="button"
@@ -345,13 +368,19 @@ export default function SettingsPage() {
               </div>
 
               <div className="space-y-1.5 md:col-span-2">
-                <label className="text-xs font-semibold text-gray-300 uppercase tracking-wider block">OAuth Redirect URI</label>
+                <label className="text-xs font-semibold text-gray-300 uppercase tracking-wider block flex items-center gap-2">
+                  OAuth Redirect URI
+                  {envConfigured.canvaRedirectUri && (
+                    <span className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/25 text-emerald-400 uppercase tracking-widest">ENV</span>
+                  )}
+                </label>
                 <input
                   type="url"
-                  placeholder="http://localhost:3000/api/canva/callback"
+                  placeholder="https://your-app.vercel.app/api/canva/callback"
                   value={form.canvaRedirectUri}
                   onChange={(e) => setForm({ ...form, canvaRedirectUri: e.target.value })}
-                  className="w-full bg-slate-950/60 border border-gray-800 rounded-xl py-3 px-4 text-sm text-white focus:outline-none focus:border-emerald-500/60 transition-all font-mono"
+                  disabled={envConfigured.canvaRedirectUri}
+                  className={`w-full bg-slate-950/60 border border-gray-800 rounded-xl py-3 px-4 text-sm text-white focus:outline-none focus:border-emerald-500/60 transition-all font-mono ${envConfigured.canvaRedirectUri ? 'opacity-60 cursor-not-allowed' : ''}`}
                 />
               </div>
             </div>
@@ -359,7 +388,7 @@ export default function SettingsPage() {
             <div className="pt-2 border-t border-white/5 space-y-3">
               <div className="text-[10px] text-gray-500 leading-normal">
                 ⚠️ Redirect URI in your Canva Developer Portal must exactly match what is set above.
-                Recommended: <span className="font-mono text-amber-400">http://127.0.0.1:3000/api/canva/callback</span>
+                Production: <span className="font-mono text-amber-400">https://etsy-ai-nine.vercel.app/api/canva/callback</span>
               </div>
 
               {/* Connect Error */}
@@ -473,15 +502,6 @@ export default function SettingsPage() {
               <p className="text-gray-400">This must exactly match what you set in your Canva Developer Portal app settings.</p>
             </div>
 
-            {/* Token endpoint response */}
-            {canvaOauthState && (
-              <div className="p-3 bg-slate-950/60 border border-white/5 rounded-xl space-y-1.5 text-xs">
-                <span className="font-bold text-gray-400 block">📥 Token Endpoint Response Debug</span>
-                <pre className="font-mono text-[10px] text-gray-300 overflow-x-auto whitespace-pre-wrap break-all bg-black/30 p-2.5 rounded-lg border border-white/5">
-                  {canvaOauthState}
-                </pre>
-              </div>
-            )}
 
             {/* API Test Results */}
             {canvaTestResult && (

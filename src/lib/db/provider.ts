@@ -76,36 +76,71 @@ export const db = {
 
   // --- SETTINGS ---
   async getSettings(): Promise<Settings> {
+    let settingsData: Settings;
     if (supabase) {
       const { data, error } = await supabase.from('settings').select('*').limit(1).single();
-      if (!error && data) return data as Settings;
+      if (!error && data) {
+        settingsData = data as Settings;
+      } else {
+        settingsData = DEFAULT_DB.settings[0];
+      }
+    } else {
+      const local = await readLocalDB();
+      if (!local.settings || local.settings.length === 0) {
+        local.settings = [DEFAULT_DB.settings[0]];
+        await writeLocalDB(local);
+      }
+      settingsData = local.settings[0];
     }
-    const local = await readLocalDB();
-    if (!local.settings || local.settings.length === 0) {
-      local.settings = [DEFAULT_DB.settings[0]];
-      await writeLocalDB(local);
-    }
-    return local.settings[0];
+
+    // Merge with process.env values so env vars are the single source of truth for Canva credentials
+    return {
+      ...settingsData,
+      openaiApiKey: process.env.OPENAI_API_KEY || settingsData.openaiApiKey || '',
+      canvaClientId: process.env.CANVA_CLIENT_ID || settingsData.canvaClientId || '',
+      canvaClientSecret: process.env.CANVA_CLIENT_SECRET || settingsData.canvaClientSecret || '',
+      canvaRedirectUri: process.env.CANVA_REDIRECT_URI || settingsData.canvaRedirectUri || 'https://etsy-ai-nine.vercel.app/api/canva/callback'
+    };
   },
 
   async saveSettings(updates: Partial<Settings>): Promise<Settings> {
+    // If Canva credentials are provided via env vars, we ignore updates to them
+    const filteredUpdates = { ...updates };
+    if (process.env.CANVA_CLIENT_ID) delete filteredUpdates.canvaClientId;
+    if (process.env.CANVA_CLIENT_SECRET) delete filteredUpdates.canvaClientSecret;
+    if (process.env.CANVA_REDIRECT_URI) delete filteredUpdates.canvaRedirectUri;
+
+    let savedData: Settings;
     if (supabase) {
       const current = await this.getSettings();
       const { data, error } = await supabase
         .from('settings')
-        .update(updates)
+        .update(filteredUpdates)
         .eq('id', current.id || 'default-settings')
         .select()
         .single();
-      if (!error && data) return data as Settings;
+      if (!error && data) {
+        savedData = data as Settings;
+      } else {
+        savedData = { ...current, ...filteredUpdates };
+      }
+    } else {
+      const local = await readLocalDB();
+      if (!local.settings || local.settings.length === 0) {
+        local.settings = [DEFAULT_DB.settings[0]];
+      }
+      local.settings[0] = { ...local.settings[0], ...filteredUpdates };
+      await writeLocalDB(local);
+      savedData = local.settings[0];
     }
-    const local = await readLocalDB();
-    if (!local.settings || local.settings.length === 0) {
-      local.settings = [DEFAULT_DB.settings[0]];
-    }
-    local.settings[0] = { ...local.settings[0], ...updates };
-    await writeLocalDB(local);
-    return local.settings[0];
+
+    return {
+      ...savedData,
+      openaiApiKey: process.env.OPENAI_API_KEY || savedData.openaiApiKey || '',
+      canvaClientId: process.env.CANVA_CLIENT_ID || savedData.canvaClientId || '',
+      canvaClientSecret: process.env.CANVA_CLIENT_SECRET || savedData.canvaClientSecret || '',
+      canvaRedirectUri: process.env.CANVA_REDIRECT_URI || savedData.canvaRedirectUri || 'https://etsy-ai-nine.vercel.app/api/canva/callback'
+    };
   },
 
   // --- PROJECTS ---
