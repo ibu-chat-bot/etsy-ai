@@ -12,6 +12,7 @@ export async function GET() {
         tokenPresent: false,
         tokenType: null,
         workspaceId: null,
+        oauthState: settings.oauthState || null,
         credentialsConfigured: {
           clientId: !!settings.canvaClientId,
           clientSecret: !!settings.canvaClientSecret,
@@ -32,6 +33,7 @@ export async function GET() {
       workspaceId: conn.workspaceId,
       connectionId: conn.id,
       createdAt: conn.createdAt,
+      oauthState: settings.oauthState || null,
       credentialsConfigured: {
         clientId: !!settings.canvaClientId,
         clientSecret: !!settings.canvaClientSecret,

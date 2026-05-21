@@ -30,6 +30,7 @@ export default function SettingsPage() {
   const [canvaTokenType, setCanvaTokenType] = useState<string | null>(null);
   const [canvaTokenPreview, setCanvaTokenPreview] = useState<string | null>(null);
   const [canvaStatusDebug, setCanvaStatusDebug] = useState<string | null>(null);
+  const [canvaOauthState, setCanvaOauthState] = useState<string | null>(null);
   const [canvaConnecting, setCanvaConnecting] = useState(false);
   const [canvaConnectError, setCanvaConnectError] = useState<string | null>(null);
   const [canvaTesting, setCanvaTesting] = useState(false);
@@ -46,13 +47,18 @@ export default function SettingsPage() {
     },
     canvaClientId: '',
     canvaClientSecret: '',
-    canvaRedirectUri: 'http://127.0.0.1:3000/api/canva/callback'
+    canvaRedirectUri: typeof window !== 'undefined' ? `${window.location.origin}/api/canva/callback` : 'http://127.0.0.1:3000/api/canva/callback'
   });
 
   // Load active settings from API
   const fetchSettings = async () => {
     try {
       const res = await fetch('/api/settings');
+      let loadedRedirectUri = 'http://127.0.0.1:3000/api/canva/callback';
+      if (typeof window !== 'undefined') {
+        loadedRedirectUri = `${window.location.origin}/api/canva/callback`;
+      }
+
       if (res.ok) {
         const data = await res.json();
         setForm({
@@ -66,7 +72,7 @@ export default function SettingsPage() {
           },
           canvaClientId: data.settings.canvaClientId || '',
           canvaClientSecret: data.settings.canvaClientSecret || '',
-          canvaRedirectUri: data.settings.canvaRedirectUri || 'http://127.0.0.1:3000/api/canva/callback'
+          canvaRedirectUri: data.settings.canvaRedirectUri || loadedRedirectUri
         });
       }
 
@@ -79,6 +85,7 @@ export default function SettingsPage() {
         setCanvaTokenType(statusData.tokenType || null);
         setCanvaTokenPreview(statusData.tokenPreview || null);
         setCanvaStatusDebug(statusData.debug || null);
+        setCanvaOauthState(statusData.oauthState || null);
       }
     } catch (err) {
       console.error('Failed to load settings', err);
@@ -465,6 +472,16 @@ export default function SettingsPage() {
               <p>Your app&apos;s redirect URI: <span className="font-mono text-white">{form.canvaRedirectUri || 'not set'}</span></p>
               <p className="text-gray-400">This must exactly match what you set in your Canva Developer Portal app settings.</p>
             </div>
+
+            {/* Token endpoint response */}
+            {canvaOauthState && (
+              <div className="p-3 bg-slate-950/60 border border-white/5 rounded-xl space-y-1.5 text-xs">
+                <span className="font-bold text-gray-400 block">📥 Token Endpoint Response Debug</span>
+                <pre className="font-mono text-[10px] text-gray-300 overflow-x-auto whitespace-pre-wrap break-all bg-black/30 p-2.5 rounded-lg border border-white/5">
+                  {canvaOauthState}
+                </pre>
+              </div>
+            )}
 
             {/* API Test Results */}
             {canvaTestResult && (

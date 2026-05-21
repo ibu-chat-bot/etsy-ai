@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const tokens = await canvaClient.exchangeCodeForTokens(code);
+    const tokens = await canvaClient.exchangeCodeForTokens(code, request.url);
     
     // Save to the single admin-id connection
     await db.saveCanvaConnection({

@@ -72,6 +72,10 @@ export interface Settings {
   canvaClientSecret?: string;
   canvaRedirectUri?: string;
   canvaCodeVerifier?: string;
+  canvaAccessToken?: string;
+  canvaRefreshToken?: string;
+  connectedWorkspaceId?: string;
+  oauthState?: string;
 }
 
 export interface CanvaConnection {

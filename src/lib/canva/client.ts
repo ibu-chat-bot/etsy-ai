@@ -50,7 +50,7 @@ export class CanvaClient {
    * Requires clientId to be configured in Settings.
    * NEVER falls back to sandbox — throws if credentials are missing.
    */
-  async getAuthUrl(state: string = 'admin'): Promise<string> {
+  async getAuthUrl(state: string = 'admin', requestUrl?: string): Promise<string> {
     const { clientId, redirectUri } = await this.getCredentials();
 
     if (!clientId) {
@@ -59,10 +59,19 @@ export class CanvaClient {
       );
     }
 
-    // Use a sane default redirect URI if none configured or if it points to wrong port.
+    // Use a sane default redirect URI if none configured or if it points to wrong port or contains localhost.
     let finalRedirectUri = redirectUri;
-    if (!finalRedirectUri || finalRedirectUri.includes(':3001')) {
-      finalRedirectUri = 'http://127.0.0.1:3000/api/canva/callback';
+    if (!finalRedirectUri || finalRedirectUri.includes(':3001') || finalRedirectUri.includes('localhost')) {
+      if (requestUrl) {
+        try {
+          const origin = new URL(requestUrl).origin;
+          finalRedirectUri = `${origin}/api/canva/callback`;
+        } catch {
+          finalRedirectUri = 'http://127.0.0.1:3000/api/canva/callback';
+        }
+      } else {
+        finalRedirectUri = 'http://127.0.0.1:3000/api/canva/callback';
+      }
       console.warn('[Canva Auth] Using fallback redirect URI:', finalRedirectUri);
     }
 
@@ -102,7 +111,7 @@ export class CanvaClient {
    * Exchanges authorization code for real Canva tokens.
    * NEVER generates mock tokens — throws on any error.
    */
-  async exchangeCodeForTokens(code: string): Promise<CanvaTokens> {
+  async exchangeCodeForTokens(code: string, requestUrl?: string): Promise<CanvaTokens> {
     const { clientId, clientSecret, redirectUri } = await this.getCredentials();
 
     if (!clientId || !clientSecret) {
@@ -113,8 +122,17 @@ export class CanvaClient {
 
     // Apply fallback redirect URI logic
     let finalRedirectUri = redirectUri;
-    if (!finalRedirectUri || finalRedirectUri.includes(':3001')) {
-      finalRedirectUri = 'http://127.0.0.1:3000/api/canva/callback';
+    if (!finalRedirectUri || finalRedirectUri.includes(':3001') || finalRedirectUri.includes('localhost')) {
+      if (requestUrl) {
+        try {
+          const origin = new URL(requestUrl).origin;
+          finalRedirectUri = `${origin}/api/canva/callback`;
+        } catch {
+          finalRedirectUri = 'http://127.0.0.1:3000/api/canva/callback';
+        }
+      } else {
+        finalRedirectUri = 'http://127.0.0.1:3000/api/canva/callback';
+      }
       console.warn('[Canva Auth] Using fallback redirect URI for token exchange:', finalRedirectUri);
     }
 
@@ -150,15 +168,21 @@ export class CanvaClient {
     });
     const { ok, status, data } = await logCanvaResponse(res, endpoint);
 
+    // Save token endpoint response into settings oauthState for debugging
+    const responsePayload = JSON.stringify(data);
+    await db.saveSettings({
+      oauthState: `HTTP ${status}: ${responsePayload}`
+    });
+
     if (!ok) {
       throw new Error(
         data?.error_description || data?.error ||
-        `Canva token exchange failed (HTTP ${status}): ${JSON.stringify(data)}`
+        `Canva token exchange failed (HTTP ${status}): ${responsePayload}`
       );
     }
 
     if (!data.access_token) {
-      throw new Error(`Canva returned OK but no access_token in response: ${JSON.stringify(data)}`);
+      throw new Error(`Canva returned OK but no access_token in response: ${responsePayload}`);
     }
 
     console.log('[Canva Auth] ✅ Real tokens received. Token type:', data.token_type);
