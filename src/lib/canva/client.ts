@@ -338,8 +338,61 @@ export class CanvaClient {
   // ─── Assets ────────────────────────────────────────────────────────────────
 
   /**
-   * Uploads a raw image asset to Canva.
-   * Endpoint: POST /v1/assets
+   * Polls a Canva async asset upload job until it reaches a terminal state.
+   * Endpoint: GET /v1/asset-uploads/{jobId}
+   * Returns the asset ID on success, throws on failure.
+   */
+  private async pollAssetUploadJob(
+    accessToken: string,
+    jobId: string,
+    maxAttempts: number = 15,
+    intervalMs: number = 2000
+  ): Promise<string> {
+    const endpoint = `${this.BASE_URL}/asset-uploads/${jobId}`;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      console.log(`[Canva Asset Poll] Attempt ${attempt}/${maxAttempts} for job ${jobId}`);
+
+      const res = await fetch(endpoint, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${accessToken}` }
+      });
+      const { ok, data } = await logCanvaResponse(res, endpoint);
+
+      if (!ok) {
+        throw new Error(`Asset upload poll failed (HTTP ${res.status}): ${JSON.stringify(data)}`);
+      }
+
+      const job = data?.job || data;
+      const status = job?.status;
+
+      if (status === 'success') {
+        const assetId = job?.asset?.id;
+        if (!assetId) {
+          throw new Error(`Asset upload job succeeded but no asset.id: ${JSON.stringify(data)}`);
+        }
+        console.log(`[Canva Asset Poll] ✅ Asset ready: ${assetId}`);
+        return assetId;
+      }
+
+      if (status === 'failed') {
+        const errMsg = job?.error?.message || job?.error?.code || 'Unknown asset upload failure';
+        throw new Error(`Canva asset upload failed: ${errMsg}`);
+      }
+
+      // status === 'in_progress' — wait and retry
+      if (attempt < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, intervalMs));
+      }
+    }
+
+    throw new Error(`Asset upload job ${jobId} timed out after ${maxAttempts} attempts`);
+  }
+
+  /**
+   * Uploads a raw image asset to Canva using the correct async endpoint.
+   * Endpoint: POST /v1/asset-uploads (application/octet-stream + Asset-Upload-Metadata header)
+   * Then polls GET /v1/asset-uploads/{jobId} until the asset is ready.
    */
   async uploadAsset(
     accessToken: string,
@@ -350,41 +403,52 @@ export class CanvaClient {
       throw new Error('No Canva access token.');
     }
 
-    const endpoint = `${this.BASE_URL}/assets`;
-    logCanvaRequest(endpoint, 'POST', { assetName, fileUrl });
-
+    // Download the file first
     const fileRes = await fetch(fileUrl);
     if (!fileRes.ok) {
       throw new Error(`Failed to download asset from ${fileUrl}: HTTP ${fileRes.status}`);
     }
-    const fileBlob = await fileRes.blob();
+    const fileBuffer = Buffer.from(await fileRes.arrayBuffer());
 
-    const formData = new FormData();
-    formData.append('file', fileBlob, assetName);
-    formData.append('name', assetName);
+    const endpoint = `${this.BASE_URL}/asset-uploads`;
+    const nameBase64 = Buffer.from(assetName.substring(0, 50)).toString('base64');
+
+    logCanvaRequest(endpoint, 'POST', { assetName, fileSize: fileBuffer.length });
 
     const res = await fetch(endpoint, {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${accessToken}` },
-      body: formData
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/octet-stream',
+        'Content-Length': String(fileBuffer.length),
+        'Asset-Upload-Metadata': JSON.stringify({ name_base64: nameBase64 })
+      },
+      body: fileBuffer
     });
     const { ok, status, data } = await logCanvaResponse(res, endpoint);
 
     if (!ok) {
       throw new Error(
         data?.message || data?.error ||
-        `Canva uploadAsset failed (HTTP ${status}): ${JSON.stringify(data)}`
+        `Canva asset upload initiation failed (HTTP ${status}): ${JSON.stringify(data)}`
       );
     }
 
-    const asset = data?.asset || data;
-    return { assetId: asset.id };
+    const jobId = data?.job?.id;
+    if (!jobId) {
+      throw new Error(`Canva asset-uploads returned no job ID: ${JSON.stringify(data)}`);
+    }
+
+    console.log(`[Canva] Asset upload job started: ${jobId}`);
+    const assetId = await this.pollAssetUploadJob(accessToken, jobId);
+    return { assetId };
   }
 
   /**
-   * Uploads an in-memory vector SVG asset directly to Canva.
-   * Endpoint: POST /v1/assets
-   * Accepts image/svg+xml MIME type.
+   * Uploads an in-memory PNG image asset directly to Canva.
+   * Converts SVG-based content to a self-contained PNG using a canvas-rendered approach.
+   * Endpoint: POST /v1/asset-uploads (application/octet-stream)
+   * Then polls for completion.
    */
   async uploadSvgAsset(
     accessToken: string,
@@ -395,31 +459,41 @@ export class CanvaClient {
       throw new Error('No Canva access token.');
     }
 
-    const endpoint = `${this.BASE_URL}/assets`;
-    logCanvaRequest(endpoint, 'POST', { assetName, svgLength: svgString.length });
+    // Upload the SVG directly as image/svg+xml bytes
+    const svgBuffer = Buffer.from(svgString, 'utf-8');
+    const endpoint = `${this.BASE_URL}/asset-uploads`;
+    const safeName = assetName.replace(/\.svg$/i, '.svg').substring(0, 50);
+    const nameBase64 = Buffer.from(safeName).toString('base64');
 
-    const fileBlob = new Blob([svgString], { type: 'image/svg+xml' });
-
-    const formData = new FormData();
-    formData.append('file', fileBlob, assetName);
-    formData.append('name', assetName);
+    logCanvaRequest(endpoint, 'POST', { assetName: safeName, svgSize: svgBuffer.length });
 
     const res = await fetch(endpoint, {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${accessToken}` },
-      body: formData
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/octet-stream',
+        'Content-Length': String(svgBuffer.length),
+        'Asset-Upload-Metadata': JSON.stringify({ name_base64: nameBase64 })
+      },
+      body: svgBuffer
     });
     const { ok, status, data } = await logCanvaResponse(res, endpoint);
 
     if (!ok) {
       throw new Error(
         data?.message || data?.error ||
-        `Canva uploadSvgAsset failed (HTTP ${status}): ${JSON.stringify(data)}`
+        `Canva SVG asset upload failed (HTTP ${status}): ${JSON.stringify(data)}`
       );
     }
 
-    const asset = data?.asset || data;
-    return { assetId: asset.id };
+    const jobId = data?.job?.id;
+    if (!jobId) {
+      throw new Error(`Canva asset-uploads returned no job ID: ${JSON.stringify(data)}`);
+    }
+
+    console.log(`[Canva] SVG asset upload job started: ${jobId}`);
+    const assetId = await this.pollAssetUploadJob(accessToken, jobId);
+    return { assetId };
   }
 
   // ─── Composite ─────────────────────────────────────────────────────────────
