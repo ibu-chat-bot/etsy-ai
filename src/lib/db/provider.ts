@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { cookies } from 'next/headers';
 import { Project, SEOAssets, VisualSystem, ContentBlueprint, PromptOutput, Settings, User, CanvaConnection, CanvaProject, GeneratedAsset } from '@/types';
 
 // Detect if Supabase is configured via environment variables
@@ -54,17 +55,64 @@ const DEFAULT_DB: LocalDB = {
   generated_assets: []
 };
 
+const kvUrl = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL || '';
+const kvToken = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN || '';
+const isKvConfigured = !!(kvUrl && kvToken);
+
 // In-memory fallback DB state (cleared when serverless instances reset, which is fine for fallback)
 let localDBInMemory: LocalDB = JSON.parse(JSON.stringify(DEFAULT_DB));
 
 // Helper: Read local DB
 async function readLocalDB(): Promise<LocalDB> {
+  if (isKvConfigured) {
+    try {
+      const res = await fetch(`${kvUrl}/get/etsy_ai:db`, {
+        headers: { Authorization: `Bearer ${kvToken}` },
+        cache: 'no-store'
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.result) {
+          const parsed = typeof data.result === 'string' ? JSON.parse(data.result) : data.result;
+          return {
+            users: parsed.users || DEFAULT_DB.users,
+            projects: parsed.projects || [],
+            seo_assets: parsed.seo_assets || [],
+            visual_systems: parsed.visual_systems || [],
+            content_blueprints: parsed.content_blueprints || [],
+            prompt_outputs: parsed.prompt_outputs || [],
+            settings: parsed.settings || DEFAULT_DB.settings,
+            canva_connections: parsed.canva_connections || [],
+            canva_projects: parsed.canva_projects || [],
+            generated_assets: parsed.generated_assets || []
+          };
+        }
+      }
+    } catch (error) {
+      console.error('Failed to read from Vercel KV / Redis:', error);
+    }
+  }
   return localDBInMemory;
 }
 
 // Helper: Write local DB
 async function writeLocalDB(data: LocalDB): Promise<void> {
   localDBInMemory = data;
+  if (isKvConfigured) {
+    try {
+      await fetch(`${kvUrl}/set/etsy_ai:db`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${kvToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data),
+        cache: 'no-store'
+      });
+    } catch (error) {
+      console.error('Failed to write to Vercel KV / Redis:', error);
+    }
+  }
 }
 
 /* ==========================================================================
@@ -73,6 +121,11 @@ async function writeLocalDB(data: LocalDB): Promise<void> {
 
 export const db = {
   isSupabase: () => !!isSupabaseConfigured,
+  getStorageType: () => {
+    if (isSupabaseConfigured) return 'Supabase';
+    if (isKvConfigured) return 'Vercel KV / Redis';
+    return 'In-Memory Fallback';
+  },
 
   // --- SETTINGS ---
   async getSettings(): Promise<Settings> {
@@ -419,6 +472,28 @@ export const db = {
       if (!error && data) return data as CanvaConnection;
       return null;
     }
+    
+    // Cookie-based fallback for Vercel serverless environments
+    try {
+      const cookieStore = await cookies();
+      const accessToken = cookieStore.get('canva_access_token')?.value;
+      const refreshToken = cookieStore.get('canva_refresh_token')?.value;
+      const workspaceId = cookieStore.get('canva_workspace_id')?.value;
+      
+      if (accessToken) {
+        return {
+          id: 'cookie-conn',
+          userId,
+          accessToken,
+          refreshToken: refreshToken || '',
+          workspaceId: workspaceId || 'workspace_default',
+          createdAt: new Date().toISOString()
+        };
+      }
+    } catch (e) {
+      console.warn('Could not read cookies on server side:', e);
+    }
+
     const local = await readLocalDB();
     const conn = local.canva_connections.find((c) => c.userId === userId);
     return conn || null;
@@ -440,6 +515,32 @@ export const db = {
         .single();
       if (!error && data) return data as CanvaConnection;
     }
+    
+    // Cookie-based fallback for Vercel serverless environments
+    try {
+      const cookieStore = await cookies();
+      cookieStore.set('canva_access_token', conn.accessToken, {
+        path: '/',
+        httpOnly: true,
+        secure: true,
+        maxAge: 30 * 24 * 60 * 60 // 30 days
+      });
+      cookieStore.set('canva_refresh_token', conn.refreshToken || '', {
+        path: '/',
+        httpOnly: true,
+        secure: true,
+        maxAge: 30 * 24 * 60 * 60 // 30 days
+      });
+      cookieStore.set('canva_workspace_id', conn.workspaceId || '', {
+        path: '/',
+        httpOnly: true,
+        secure: true,
+        maxAge: 30 * 24 * 60 * 60 // 30 days
+      });
+    } catch (e) {
+      console.warn('Could not write cookies on server side:', e);
+    }
+
     const local = await readLocalDB();
     const index = local.canva_connections.findIndex((c) => c.userId === conn.userId);
     const newConn: CanvaConnection = {
@@ -459,8 +560,18 @@ export const db = {
   async deleteCanvaConnection(userId: string): Promise<boolean> {
     if (supabase) {
       const { error } = await supabase.from('canva_connections').delete().eq('user_id', userId);
-      return !error;
     }
+    
+    // Clear cookies
+    try {
+      const cookieStore = await cookies();
+      cookieStore.delete('canva_access_token');
+      cookieStore.delete('canva_refresh_token');
+      cookieStore.delete('canva_workspace_id');
+    } catch (e) {
+      console.warn('Could not delete cookies on server side:', e);
+    }
+
     const local = await readLocalDB();
     local.canva_connections = local.canva_connections.filter((c) => c.userId !== userId);
     await writeLocalDB(local);

@@ -50,7 +50,7 @@ export class CanvaClient {
    * Requires clientId to be configured in Settings.
    * NEVER falls back to sandbox — throws if credentials are missing.
    */
-  async getAuthUrl(state: string = 'admin', requestUrl?: string): Promise<string> {
+  async getAuthUrl(state: string = 'admin', requestUrl?: string): Promise<{ authUrl: string; codeVerifier: string }> {
     const { clientId, redirectUri } = await this.getCredentials();
 
     if (!clientId) {
@@ -104,14 +104,14 @@ export class CanvaClient {
     // Official Canva OAuth authorize endpoint (no version suffix)
     const url = `https://www.canva.com/api/oauth/authorize?${params.toString()}`;
     console.log('[Canva Auth] Generated auth URL:', url);
-    return url;
+    return { authUrl: url, codeVerifier };
   }
 
   /**
    * Exchanges authorization code for real Canva tokens.
    * NEVER generates mock tokens — throws on any error.
    */
-  async exchangeCodeForTokens(code: string, requestUrl?: string): Promise<CanvaTokens> {
+  async exchangeCodeForTokens(code: string, requestUrl?: string, passedVerifier?: string): Promise<CanvaTokens> {
     const { clientId, clientSecret, redirectUri } = await this.getCredentials();
 
     if (!clientId || !clientSecret) {
@@ -146,8 +146,8 @@ export class CanvaClient {
       redirect_uri: finalRedirectUri
     });
     // Retrieve stored code verifier for PKCE
-    const { canvaCodeVerifier } = await db.getSettings();
-    const verifier = canvaCodeVerifier || '';
+    const settings = await db.getSettings();
+    const verifier = passedVerifier || settings.canvaCodeVerifier || '';
     const params = new URLSearchParams({
       grant_type: 'authorization_code',
       code,
@@ -260,9 +260,12 @@ export class CanvaClient {
     const endpoint = `${this.BASE_URL}/designs`;
 
     const body: Record<string, unknown> = {
-      type: 'custom',
-      width,
-      height
+      type: 'type_and_asset',
+      design_type: {
+        type: 'custom',
+        width,
+        height
+      }
     };
     if (title) body.title = title;
 

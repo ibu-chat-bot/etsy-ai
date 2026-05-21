@@ -5,9 +5,11 @@ import { db } from '@/lib/db/provider';
 export async function GET() {
   try {
     const projects = await db.getProjects();
+    const storageType = db.getStorageType();
     return NextResponse.json({
       success: true,
-      projects
+      projects,
+      storageType
     });
   } catch (error: any) {
     return NextResponse.json(

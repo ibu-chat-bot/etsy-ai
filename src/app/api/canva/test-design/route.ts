@@ -53,9 +53,12 @@ export async function GET(_request: NextRequest) {
   // Real token — make the actual API call
   const endpoint = 'https://api.canva.com/rest/v1/designs';
   const requestBody = {
-    type: 'custom',
-    width: 1080,
-    height: 1080,
+    type: 'type_and_asset',
+    design_type: {
+      type: 'custom',
+      width: 1080,
+      height: 1080
+    },
     title: 'Etsy AI Diagnostic Test Design'
   };
 

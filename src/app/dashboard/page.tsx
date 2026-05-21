@@ -26,6 +26,7 @@ export default function DashboardPage() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [canvaConnected, setCanvaConnected] = useState(false);
   const [canvaWorkspaceId, setCanvaWorkspaceId] = useState('');
+  const [storageType, setStorageType] = useState('database');
 
   // Load Projects
   const loadProjects = async () => {
@@ -34,6 +35,9 @@ export default function DashboardPage() {
       if (res.ok) {
         const data = await res.json();
         setProjects(data.projects || []);
+        if (data.storageType) {
+          setStorageType(data.storageType);
+        }
       }
     } catch (err) {
       console.error('Failed to load projects', err);
@@ -169,7 +173,7 @@ export default function DashboardPage() {
               <FolderGit2 className="w-5 h-5 text-emerald-400" />
             </div>
             <div className="text-3xl font-black text-white">{loading ? '...' : totalProjects}</div>
-            <p className="text-[10px] text-gray-500 mt-1 font-medium">Packages stored on local DB</p>
+            <p className="text-[10px] text-gray-500 mt-1 font-medium">Packages stored on {storageType}</p>
           </GlassCard>
 
           <GlassCard hoverGlow={false} className="relative overflow-hidden py-5 px-6">
