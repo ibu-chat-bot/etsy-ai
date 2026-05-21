@@ -1,0 +1,538 @@
+import fs from 'fs/promises';
+import path from 'path';
+import { createClient } from '@supabase/supabase-js';
+import { Project, SEOAssets, VisualSystem, ContentBlueprint, PromptOutput, Settings, User, CanvaConnection, CanvaProject, GeneratedAsset } from '@/types';
+
+// Detect if Supabase is configured via environment variables
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const isSupabaseConfigured = supabaseUrl && supabaseKey;
+
+const supabase = isSupabaseConfigured ? createClient(supabaseUrl, supabaseKey) : null;
+
+// Local JSON database file path
+const LOCAL_DB_PATH = path.join(process.cwd(), 'local-db.json');
+
+// Interface for the local DB file structure
+interface LocalDB {
+  users: User[];
+  projects: Project[];
+  seo_assets: SEOAssets[];
+  visual_systems: VisualSystem[];
+  content_blueprints: ContentBlueprint[];
+  prompt_outputs: PromptOutput[];
+  settings: Settings[];
+  canva_connections: CanvaConnection[];
+  canva_projects: CanvaProject[];
+  generated_assets: GeneratedAsset[];
+}
+
+// Default state of local database
+const DEFAULT_DB: LocalDB = {
+  users: [
+    {
+      id: 'admin-id',
+      email: 'admin@etsyai.com',
+      passwordHash: 'admin123', // Clean, simple password for easy login in the local internal tool
+      createdAt: new Date().toISOString()
+    }
+  ],
+  projects: [],
+  seo_assets: [],
+  visual_systems: [],
+  content_blueprints: [],
+  prompt_outputs: [],
+  settings: [
+    {
+      id: 'default-settings',
+      openaiApiKey: process.env.OPENAI_API_KEY || '',
+      defaultLanguage: 'en',
+      brandDefaults: {
+        authorName: 'Etsy Canva Studio',
+        supportEmail: 'support@etsyai.com',
+        canvaHelpLink: 'https://canva.com'
+      }
+    }
+  ],
+  canva_connections: [],
+  canva_projects: [],
+  generated_assets: []
+};
+
+// Helper: Read local DB file
+async function readLocalDB(): Promise<LocalDB> {
+  try {
+    const data = await fs.readFile(LOCAL_DB_PATH, 'utf-8');
+    const parsed = JSON.parse(data);
+    return {
+      users: parsed.users || DEFAULT_DB.users,
+      projects: parsed.projects || [],
+      seo_assets: parsed.seo_assets || [],
+      visual_systems: parsed.visual_systems || [],
+      content_blueprints: parsed.content_blueprints || [],
+      prompt_outputs: parsed.prompt_outputs || [],
+      settings: parsed.settings || DEFAULT_DB.settings,
+      canva_connections: parsed.canva_connections || [],
+      canva_projects: parsed.canva_projects || [],
+      generated_assets: parsed.generated_assets || []
+    };
+  } catch (error) {
+    // If file doesn't exist, create it with default data
+    await writeLocalDB(DEFAULT_DB);
+    return DEFAULT_DB;
+  }
+}
+
+// Helper: Write local DB file
+async function writeLocalDB(data: LocalDB): Promise<void> {
+  await fs.writeFile(LOCAL_DB_PATH, JSON.stringify(data, null, 2), 'utf-8');
+}
+
+/* ==========================================================================
+   UNIFIED DATABASE API IMPLEMENTATION
+   ========================================================================== */
+
+export const db = {
+  isSupabase: () => !!isSupabaseConfigured,
+
+  // --- SETTINGS ---
+  async getSettings(): Promise<Settings> {
+    if (supabase) {
+      const { data, error } = await supabase.from('settings').select('*').limit(1).single();
+      if (!error && data) return data as Settings;
+    }
+    const local = await readLocalDB();
+    if (!local.settings || local.settings.length === 0) {
+      local.settings = [DEFAULT_DB.settings[0]];
+      await writeLocalDB(local);
+    }
+    return local.settings[0];
+  },
+
+  async saveSettings(updates: Partial<Settings>): Promise<Settings> {
+    if (supabase) {
+      const current = await this.getSettings();
+      const { data, error } = await supabase
+        .from('settings')
+        .update(updates)
+        .eq('id', current.id || 'default-settings')
+        .select()
+        .single();
+      if (!error && data) return data as Settings;
+    }
+    const local = await readLocalDB();
+    if (!local.settings || local.settings.length === 0) {
+      local.settings = [DEFAULT_DB.settings[0]];
+    }
+    local.settings[0] = { ...local.settings[0], ...updates };
+    await writeLocalDB(local);
+    return local.settings[0];
+  },
+
+  // --- PROJECTS ---
+  async getProjects(): Promise<Project[]> {
+    if (supabase) {
+      const { data, error } = await supabase.from('projects').select('*').order('created_at', { ascending: false });
+      if (!error && data) return data as Project[];
+    }
+    const local = await readLocalDB();
+    return local.projects.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  },
+
+  async getProject(id: string): Promise<Project | null> {
+    if (supabase) {
+      const { data, error } = await supabase.from('projects').select('*').eq('id', id).single();
+      if (!error && data) return data as Project;
+      return null;
+    }
+    const local = await readLocalDB();
+    return local.projects.find((p) => p.id === id) || null;
+  },
+
+  async createProject(project: Omit<Project, 'id' | 'createdAt' | 'updatedAt'>): Promise<Project> {
+    const id = 'proj_' + Math.random().toString(36).substring(2, 11);
+    const now = new Date().toISOString();
+    const newProject: Project = {
+      ...project,
+      id,
+      createdAt: now,
+      updatedAt: now
+    };
+
+    if (supabase) {
+      const { data, error } = await supabase.from('projects').insert([newProject]).select().single();
+      if (!error && data) return data as Project;
+    }
+    const local = await readLocalDB();
+    local.projects.push(newProject);
+    await writeLocalDB(local);
+    return newProject;
+  },
+
+  async updateProject(id: string, updates: Partial<Project>): Promise<Project> {
+    const now = new Date().toISOString();
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('projects')
+        .update({ ...updates, updated_at: now })
+        .eq('id', id)
+        .select()
+        .single();
+      if (!error && data) return data as Project;
+    }
+    const local = await readLocalDB();
+    const index = local.projects.findIndex((p) => p.id === id);
+    if (index === -1) throw new Error('Project not found');
+    local.projects[index] = { ...local.projects[index], ...updates, updatedAt: now };
+    await writeLocalDB(local);
+    return local.projects[index];
+  },
+
+  async deleteProject(id: string): Promise<boolean> {
+    if (supabase) {
+      const { error } = await supabase.from('projects').delete().eq('id', id);
+      return !error;
+    }
+    const local = await readLocalDB();
+    local.projects = local.projects.filter((p) => p.id !== id);
+    local.seo_assets = local.seo_assets.filter((s) => s.projectId !== id);
+    local.visual_systems = local.visual_systems.filter((v) => v.projectId !== id);
+    local.content_blueprints = local.content_blueprints.filter((b) => b.projectId !== id);
+    local.prompt_outputs = local.prompt_outputs.filter((a) => a.projectId !== id);
+    await writeLocalDB(local);
+    return true;
+  },
+
+  // --- SEO ASSETS ---
+  async getSEOAssets(projectId: string): Promise<SEOAssets | null> {
+    if (supabase) {
+      const { data, error } = await supabase.from('seo_assets').select('*').eq('project_id', projectId).single();
+      if (!error && data) return data as SEOAssets;
+      return null;
+    }
+    const local = await readLocalDB();
+    return local.seo_assets.find((s) => s.projectId === projectId) || null;
+  },
+
+  async saveSEOAssets(seo: Omit<SEOAssets, 'id'>): Promise<SEOAssets> {
+    if (supabase) {
+      const current = await this.getSEOAssets(seo.projectId);
+      if (current) {
+        const { data, error } = await supabase.from('seo_assets').update(seo).eq('project_id', seo.projectId).select().single();
+        if (!error && data) return data as SEOAssets;
+      } else {
+        const { data, error } = await supabase.from('seo_assets').insert([{ ...seo, id: 'seo_' + Math.random().toString(36).substring(2, 11) }]).select().single();
+        if (!error && data) return data as SEOAssets;
+      }
+    }
+    const local = await readLocalDB();
+    const index = local.seo_assets.findIndex((s) => s.projectId === seo.projectId);
+    const newSeo: SEOAssets = {
+      ...seo,
+      id: index !== -1 ? local.seo_assets[index].id : 'seo_' + Math.random().toString(36).substring(2, 11)
+    };
+    if (index !== -1) {
+      local.seo_assets[index] = newSeo;
+    } else {
+      local.seo_assets.push(newSeo);
+    }
+    await writeLocalDB(local);
+    return newSeo;
+  },
+
+  // --- VISUAL SYSTEMS ---
+  async getVisualSystem(projectId: string): Promise<VisualSystem | null> {
+    if (supabase) {
+      const { data, error } = await supabase.from('visual_systems').select('*').eq('project_id', projectId).single();
+      if (!error && data) return data as VisualSystem;
+      return null;
+    }
+    const local = await readLocalDB();
+    return local.visual_systems.find((v) => v.projectId === projectId) || null;
+  },
+
+  async saveVisualSystem(visual: Omit<VisualSystem, 'id'>): Promise<VisualSystem> {
+    if (supabase) {
+      const current = await this.getVisualSystem(visual.projectId);
+      if (current) {
+        const { data, error } = await supabase.from('visual_systems').update(visual).eq('project_id', visual.projectId).select().single();
+        if (!error && data) return data as VisualSystem;
+      } else {
+        const { data, error } = await supabase.from('visual_systems').insert([{ ...visual, id: 'vs_' + Math.random().toString(36).substring(2, 11) }]).select().single();
+        if (!error && data) return data as VisualSystem;
+      }
+    }
+    const local = await readLocalDB();
+    const index = local.visual_systems.findIndex((v) => v.projectId === visual.projectId);
+    const newVisual: VisualSystem = {
+      ...visual,
+      id: index !== -1 ? local.visual_systems[index].id : 'vs_' + Math.random().toString(36).substring(2, 11)
+    };
+    if (index !== -1) {
+      local.visual_systems[index] = newVisual;
+    } else {
+      local.visual_systems.push(newVisual);
+    }
+    await writeLocalDB(local);
+    return newVisual;
+  },
+
+  // --- CONTENT BLUEPRINTS ---
+  async getContentBlueprints(projectId: string): Promise<ContentBlueprint[]> {
+    if (supabase) {
+      const { data, error } = await supabase.from('content_blueprints').select('*').eq('project_id', projectId).order('template_number', { ascending: true });
+      if (!error && data) return data as ContentBlueprint[];
+    }
+    const local = await readLocalDB();
+    return local.content_blueprints
+      .filter((b) => b.projectId === projectId)
+      .sort((a, b) => a.templateNumber - b.templateNumber);
+  },
+
+  async saveContentBlueprints(projectId: string, blueprints: Omit<ContentBlueprint, 'id'>[]): Promise<ContentBlueprint[]> {
+    if (supabase) {
+      // Clear existing blueprints for this project and insert new ones
+      await supabase.from('content_blueprints').delete().eq('project_id', projectId);
+      const toInsert = blueprints.map((b) => ({ 
+        ...b, 
+        project_id: projectId,
+        projectId,
+        id: 'cb_' + Math.random().toString(36).substring(2, 11) 
+      }));
+      const { data, error } = await supabase.from('content_blueprints').insert(toInsert).select();
+      if (!error && data) return data as ContentBlueprint[];
+    }
+    const local = await readLocalDB();
+    // Filter out old blueprints
+    local.content_blueprints = local.content_blueprints.filter((b) => b.projectId !== projectId);
+    // Add new ones
+    const newBlueprints = blueprints.map((b) => ({
+      ...b,
+      projectId,
+      id: 'cb_' + Math.random().toString(36).substring(2, 11)
+    }));
+    local.content_blueprints.push(...newBlueprints);
+    await writeLocalDB(local);
+    return newBlueprints;
+  },
+
+  // --- PROMPT OUTPUTS ---
+  async getPromptOutputs(projectId: string): Promise<PromptOutput[]> {
+    if (supabase) {
+      const { data, error } = await supabase.from('prompt_outputs').select('*').eq('project_id', projectId).order('created_at', { ascending: true });
+      if (!error && data) return data as PromptOutput[];
+    }
+    const local = await readLocalDB();
+    return local.prompt_outputs.filter((a) => a.projectId === projectId);
+  },
+
+  async savePromptOutput(output: Omit<PromptOutput, 'id' | 'createdAt'>): Promise<PromptOutput> {
+    const now = new Date().toISOString();
+    
+    if (supabase) {
+      const { data: existing } = await supabase
+        .from('prompt_outputs')
+        .select('id')
+        .eq('project_id', output.projectId)
+        .eq('prompt_type', output.promptType)
+        .maybeSingle();
+
+      if (existing) {
+        const { data, error } = await supabase
+          .from('prompt_outputs')
+          .update({ content: output.content })
+          .eq('id', existing.id)
+          .select()
+          .single();
+        if (!error && data) return data as PromptOutput;
+      } else {
+        const newOutput = {
+          ...output,
+          id: 'prompt_' + Math.random().toString(36).substring(2, 11),
+          created_at: now
+        };
+        const { data, error } = await supabase.from('prompt_outputs').insert([newOutput]).select().single();
+        if (!error && data) return data as PromptOutput;
+      }
+    }
+
+    const local = await readLocalDB();
+    const index = local.prompt_outputs.findIndex((a) => a.projectId === output.projectId && a.promptType === output.promptType);
+    const newOutput: PromptOutput = {
+      ...output,
+      id: index !== -1 ? local.prompt_outputs[index].id : 'prompt_' + Math.random().toString(36).substring(2, 11),
+      createdAt: index !== -1 ? local.prompt_outputs[index].createdAt : now
+    };
+
+    if (index !== -1) {
+      local.prompt_outputs[index] = newOutput;
+    } else {
+      local.prompt_outputs.push(newOutput);
+    }
+
+    await writeLocalDB(local);
+    return newOutput;
+  },
+
+  async deletePromptOutputs(projectId: string): Promise<boolean> {
+    if (supabase) {
+      const { error } = await supabase.from('prompt_outputs').delete().eq('project_id', projectId);
+      return !error;
+    }
+    const local = await readLocalDB();
+    local.prompt_outputs = local.prompt_outputs.filter((a) => a.projectId !== projectId);
+    await writeLocalDB(local);
+    return true;
+  },
+
+  // --- SINGLE USER AUTHENTICATION ---
+  async validateUser(email: string, passwordHash: string): Promise<User | null> {
+    // If Supabase is configured, we can query users
+    if (supabase) {
+      const { data, error } = await supabase.from('users').select('*').eq('email', email).eq('password_hash', passwordHash).single();
+      if (!error && data) return data as User;
+      return null;
+    }
+    const local = await readLocalDB();
+    const found = local.users.find((u) => u.email === email && u.passwordHash === passwordHash);
+    return found || null;
+  },
+
+  // --- CANVA CONNECTIONS ---
+  async getCanvaConnection(userId: string): Promise<CanvaConnection | null> {
+    if (supabase) {
+      const { data, error } = await supabase.from('canva_connections').select('*').eq('user_id', userId).single();
+      if (!error && data) return data as CanvaConnection;
+      return null;
+    }
+    const local = await readLocalDB();
+    const conn = local.canva_connections.find((c) => c.userId === userId);
+    return conn || null;
+  },
+
+  async saveCanvaConnection(conn: Omit<CanvaConnection, 'id' | 'createdAt'>): Promise<CanvaConnection> {
+    const now = new Date().toISOString();
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('canva_connections')
+        .upsert({
+          user_id: conn.userId,
+          access_token: conn.accessToken,
+          refresh_token: conn.refreshToken,
+          workspace_id: conn.workspaceId,
+          created_at: now
+        })
+        .select()
+        .single();
+      if (!error && data) return data as CanvaConnection;
+    }
+    const local = await readLocalDB();
+    const index = local.canva_connections.findIndex((c) => c.userId === conn.userId);
+    const newConn: CanvaConnection = {
+      ...conn,
+      id: index !== -1 ? local.canva_connections[index].id : 'conn_' + Math.random().toString(36).substring(2, 11),
+      createdAt: index !== -1 ? local.canva_connections[index].createdAt : now
+    };
+    if (index !== -1) {
+      local.canva_connections[index] = newConn;
+    } else {
+      local.canva_connections.push(newConn);
+    }
+    await writeLocalDB(local);
+    return newConn;
+  },
+
+  async deleteCanvaConnection(userId: string): Promise<boolean> {
+    if (supabase) {
+      const { error } = await supabase.from('canva_connections').delete().eq('user_id', userId);
+      return !error;
+    }
+    const local = await readLocalDB();
+    local.canva_connections = local.canva_connections.filter((c) => c.userId !== userId);
+    await writeLocalDB(local);
+    return true;
+  },
+
+  // --- CANVA PROJECTS ---
+  async getCanvaProject(projectId: string): Promise<CanvaProject | null> {
+    if (supabase) {
+      const { data, error } = await supabase.from('canva_projects').select('*').eq('project_id', projectId).single();
+      if (!error && data) return data as CanvaProject;
+      return null;
+    }
+    const local = await readLocalDB();
+    const proj = local.canva_projects.find((p) => p.projectId === projectId);
+    return proj || null;
+  },
+
+  async saveCanvaProject(proj: Omit<CanvaProject, 'id' | 'createdAt'>): Promise<CanvaProject> {
+    const now = new Date().toISOString();
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('canva_projects')
+        .upsert({
+          project_id: proj.projectId,
+          canva_design_id: proj.canvaDesignId,
+          template_link: proj.templateLink,
+          preview_link: proj.previewLink,
+          ...(proj.layoutRecipe ? { layout_recipe: proj.layoutRecipe } : {}),
+          created_at: now
+        })
+        .select()
+        .single();
+      if (!error && data) return data as CanvaProject;
+    }
+    const local = await readLocalDB();
+    const index = local.canva_projects.findIndex((p) => p.projectId === proj.projectId);
+    const newProj: CanvaProject = {
+      ...proj,
+      id: index !== -1 ? local.canva_projects[index].id : 'canvaproj_' + Math.random().toString(36).substring(2, 11),
+      createdAt: index !== -1 ? local.canva_projects[index].createdAt : now
+    };
+    if (index !== -1) {
+      local.canva_projects[index] = newProj;
+    } else {
+      local.canva_projects.push(newProj);
+    }
+    await writeLocalDB(local);
+    return newProj;
+  },
+
+  // --- GENERATED ASSETS ---
+  async getGeneratedAssets(projectId: string): Promise<GeneratedAsset[]> {
+    if (supabase) {
+      const { data, error } = await supabase.from('generated_assets').select('*').eq('project_id', projectId);
+      if (!error && data) return data as GeneratedAsset[];
+      return [];
+    }
+    const local = await readLocalDB();
+    return local.generated_assets.filter((a) => a.projectId === projectId);
+  },
+
+  async saveGeneratedAsset(asset: Omit<GeneratedAsset, 'id' | 'createdAt'>): Promise<GeneratedAsset> {
+    const now = new Date().toISOString();
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('generated_assets')
+        .insert([{
+          project_id: asset.projectId,
+          asset_type: asset.assetType,
+          file_url: asset.fileUrl,
+          prompt_used: asset.promptUsed || '',
+          created_at: now
+        }])
+        .select()
+        .single();
+      if (!error && data) return data as GeneratedAsset;
+    }
+    const local = await readLocalDB();
+    const newAsset: GeneratedAsset = {
+      ...asset,
+      id: 'asset_' + Math.random().toString(36).substring(2, 11),
+      createdAt: now
+    };
+    local.generated_assets.push(newAsset);
+    await writeLocalDB(local);
+    return newAsset;
+  }
+};
