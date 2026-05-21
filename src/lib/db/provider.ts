@@ -1,5 +1,3 @@
-import fs from 'fs/promises';
-import path from 'path';
 import { createClient } from '@supabase/supabase-js';
 import { Project, SEOAssets, VisualSystem, ContentBlueprint, PromptOutput, Settings, User, CanvaConnection, CanvaProject, GeneratedAsset } from '@/types';
 
@@ -10,10 +8,7 @@ const isSupabaseConfigured = supabaseUrl && supabaseKey;
 
 const supabase = isSupabaseConfigured ? createClient(supabaseUrl, supabaseKey) : null;
 
-// Local JSON database file path
-const LOCAL_DB_PATH = path.join(process.cwd(), 'local-db.json');
-
-// Interface for the local DB file structure
+// Interface for the local DB structure
 interface LocalDB {
   users: User[];
   projects: Project[];
@@ -59,33 +54,17 @@ const DEFAULT_DB: LocalDB = {
   generated_assets: []
 };
 
-// Helper: Read local DB file
+// In-memory fallback DB state (cleared when serverless instances reset, which is fine for fallback)
+let localDBInMemory: LocalDB = JSON.parse(JSON.stringify(DEFAULT_DB));
+
+// Helper: Read local DB
 async function readLocalDB(): Promise<LocalDB> {
-  try {
-    const data = await fs.readFile(LOCAL_DB_PATH, 'utf-8');
-    const parsed = JSON.parse(data);
-    return {
-      users: parsed.users || DEFAULT_DB.users,
-      projects: parsed.projects || [],
-      seo_assets: parsed.seo_assets || [],
-      visual_systems: parsed.visual_systems || [],
-      content_blueprints: parsed.content_blueprints || [],
-      prompt_outputs: parsed.prompt_outputs || [],
-      settings: parsed.settings || DEFAULT_DB.settings,
-      canva_connections: parsed.canva_connections || [],
-      canva_projects: parsed.canva_projects || [],
-      generated_assets: parsed.generated_assets || []
-    };
-  } catch (error) {
-    // If file doesn't exist, create it with default data
-    await writeLocalDB(DEFAULT_DB);
-    return DEFAULT_DB;
-  }
+  return localDBInMemory;
 }
 
-// Helper: Write local DB file
+// Helper: Write local DB
 async function writeLocalDB(data: LocalDB): Promise<void> {
-  await fs.writeFile(LOCAL_DB_PATH, JSON.stringify(data, null, 2), 'utf-8');
+  localDBInMemory = data;
 }
 
 /* ==========================================================================
