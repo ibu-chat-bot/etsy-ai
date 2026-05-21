@@ -765,17 +765,15 @@ export class CanvaClient {
     ];
 
     // ── Step 1: Generate & Upload stunning custom vector SVG for each slide ──
-    const uploadedAssetIds: string[] = [];
-
-    for (let i = 0; i < effectiveBlueprints.length; i++) {
-      const bp = effectiveBlueprints[i];
+    // ── Step 1: Generate & Upload stunning custom vector SVG for each slide in parallel ──
+    const uploadPromises = effectiveBlueprints.map(async (bp, i) => {
       const imageUrl =
         imageAssets[i % Math.max(imageAssets.length, 1)]?.fileUrl ||
         defaultStockPhotos[i % defaultStockPhotos.length];
 
       console.log(`[Canva] Generating vector SVG layout for slide ${i + 1}: "${bp.purpose || 'Template'}"`);
 
-      // Asynchronously download and convert image to self-contained Base64 Data URI
+      // Asynchronously download and convert remote network image to self-contained Base64 Data URI
       const base64Image = await getBase64Image(imageUrl);
 
       const svgString = this.generateSlideSvg({
@@ -795,13 +793,15 @@ export class CanvaClient {
 
       try {
         const { assetId } = await this.uploadSvgAsset(accessToken, svgString, assetName);
-        uploadedAssetIds.push(assetId);
-        console.log(`[Canva] ✅ Vector SVG Asset uploaded successfully: ${assetId}`);
+        console.log(`[Canva] ✅ Vector SVG Asset uploaded successfully for slide ${i + 1}: ${assetId}`);
+        return assetId;
       } catch (uploadErr: any) {
         console.error(`[Canva] ❌ Vector SVG Asset upload failed (slide ${i + 1}): ${uploadErr.message}`);
-        uploadedAssetIds.push('');
+        return '';
       }
-    }
+    });
+
+    const uploadedAssetIds = await Promise.all(uploadPromises);
 
     // ── Step 2: Create one Canva design per slide using the uploaded asset ────
     interface SlideDesign {
