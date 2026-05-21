@@ -4,6 +4,7 @@ import { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { Header } from '@/components/layout/Header';
 import { GlassCard } from '@/components/ui/GlassCard';
+import { CanvaRehberi } from '@/components/CanvaRehberi';
 import { 
   Sparkles, 
   ArrowLeft, 
@@ -55,6 +56,12 @@ export default function ProjectDetailPage({
   const [canvaBuilding, setCanvaBuilding] = useState(false);
   const [canvaProject, setCanvaProject] = useState<any | null>(null);
   const [canvaError, setCanvaError] = useState<{ message: string; hint?: string } | null>(null);
+  const [canvaRehberiAcik, setCanvaRehberiAcik] = useState(false);
+  const [inputTemplateLink, setInputTemplateLink] = useState('');
+  const [savingLink, setSavingLink] = useState(false);
+  const [etsyListingCopy, setEtsyListingCopy] = useState<any | null>(null);
+  const [generatingEtsyListing, setGeneratingEtsyListing] = useState(false);
+  const [copiedEtsyField, setCopiedEtsyField] = useState<string | null>(null);
   const [generatedAssets, setGeneratedAssets] = useState<any[]>([]);
   const [generatingImages, setGeneratingImages] = useState(false);
   const [generatingMockups, setGeneratingMockups] = useState(false);
@@ -76,6 +83,9 @@ export default function ProjectDetailPage({
       setBlueprints(data.blueprints || []);
       setPromptOutputs(data.promptOutputs || []);
       setCanvaProject(data.canvaProject || null);
+      if (data.canvaProject?.templateLink) {
+        setInputTemplateLink(data.canvaProject.templateLink);
+      }
       setGeneratedAssets(data.generatedAssets || []);
     } catch (err) {
       console.error('Failed to load project details', err);
@@ -364,6 +374,59 @@ Etsy Section Categories: ${shopBranding?.categorySuggestions?.join(', ') || ''}
     } finally {
       setCanvaBuilding(false);
     }
+  };
+
+  const handleSaveTemplateLink = async (link: string) => {
+    if (!link.includes('canva.com/design')) {
+      alert('Lütfen geçerli bir Canva şablon kopyalama bağlantısı (https://www.canva.com/design/...) girin.');
+      return;
+    }
+    setSavingLink(true);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/template-link`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ templateLink: link })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        await loadProjectDetails();
+        alert('Canva Şablon bağlantısı başarıyla kaydedildi!');
+      } else {
+        alert(data.error || 'Bağlantı kaydedilemedi');
+      }
+    } catch (err: any) {
+      alert(`Kaydetme hatası: ${err.message}`);
+    } finally {
+      setSavingLink(false);
+    }
+  };
+
+  const handleGenerateEtsyListing = async (link: string) => {
+    setGeneratingEtsyListing(true);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/etsy-listing`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ templateLink: link })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setEtsyListingCopy(data);
+      } else {
+        alert(data.error || 'Etsy listing metinleri üretilemedi');
+      }
+    } catch (err: any) {
+      alert(`Hata: ${err.message}`);
+    } finally {
+      setGeneratingEtsyListing(false);
+    }
+  };
+
+  const handleCopyEtsyField = (text: string, fieldName: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedEtsyField(fieldName);
+    setTimeout(() => setCopiedEtsyField(null), 2000);
   };
 
   const handleGenerateMockups = async () => {
@@ -900,44 +963,251 @@ Etsy Section Categories: ${shopBranding?.categorySuggestions?.join(', ') || ''}
                 </div>
 
                 {canvaProject ? (
-                  <GlassCard hoverGlow={false} className="space-y-5">
-                    <div className="flex items-center justify-between border-b border-white/5 pb-3">
-                      <span className="text-xs font-bold text-white uppercase tracking-wider block">Active Canva Design Resource</span>
-                      <span className="text-[9px] font-mono bg-white/5 text-gray-400 py-1 px-2.5 rounded-lg">ID: {canvaProject.canvaDesignId}</span>
+                  <div className="space-y-6">
+                    {/* Active Canva Resource Header */}
+                    <div className="bg-slate-950/40 border border-white/5 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div>
+                        <span className="text-[10px] font-bold text-purple-400 uppercase tracking-widest block">Active Canva Design Workspace</span>
+                        <h4 className="text-sm font-semibold text-white mt-1">Sistem Tasarımı Üretti & Canva Altyapısı Hazır</h4>
+                      </div>
+                      <span className="text-[10px] font-mono bg-white/5 text-gray-400 py-1 px-3 rounded-lg border border-white/5 align-self-start sm:align-self-auto">
+                        Design ID: {canvaProject.canvaDesignId}
+                      </span>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <a
-                        href={canvaProject.templateLink}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="p-5 bg-emerald-500/5 hover:bg-emerald-500/10 border border-emerald-500/20 hover:border-emerald-500/40 rounded-2xl flex flex-col space-y-2 group transition-all"
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-extrabold text-emerald-400 uppercase tracking-wider font-mono">Template Access Link</span>
-                          <ExternalLink className="w-4 h-4 text-emerald-400 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                    {/* Step-by-Step Flow Grid */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                      
+                      {/* Step 1: Open in Canva & Extract Link */}
+                      <GlassCard hoverGlow={false} className="space-y-5 p-5">
+                        <div className="space-y-1">
+                          <span className="text-[10px] font-extrabold text-purple-400 uppercase tracking-widest font-mono block">Adım 1 — Tasarımı Canva'da Açın</span>
+                          <h4 className="text-base font-bold text-white">Canva Hesabınızda Düzenleme & Link Alma</h4>
+                          <p className="text-xs text-gray-400">
+                            Aşağıdaki butona basarak şablon tasarımını kendi Canva hesabınızda açın. Canva içinde gerekli düzenlemeleri yapıp şablon kopyalama bağlantısını çıkartın.
+                          </p>
                         </div>
-                        <p className="text-[11px] text-gray-400 leading-normal">
-                          This is the "Use as Template" link which you will deliver to buyers. Clicking imports the template directly to their accounts.
-                        </p>
-                      </a>
 
-                      <a
-                        href={canvaProject.previewLink}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="p-5 bg-indigo-500/5 hover:bg-indigo-500/10 border border-indigo-500/20 hover:border-indigo-500/40 rounded-2xl flex flex-col space-y-2 group transition-all"
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-extrabold text-indigo-400 uppercase tracking-wider font-mono">Workspace Live Preview</span>
-                          <ExternalLink className="w-4 h-4 text-indigo-400 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                        <div className="flex flex-col sm:flex-row gap-3">
+                          <a
+                            href={`https://www.canva.com/design/${canvaProject.canvaDesignId}/edit`}
+                            target="_blank"
+                            rel="noreferrer"
+                            onClick={() => setCanvaRehberiAcik(true)}
+                            className="flex-1 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs uppercase tracking-wider py-3.5 px-4 rounded-xl text-center shadow-lg shadow-purple-500/10 hover:shadow-purple-500/20 active:scale-[0.99] transition-all flex items-center justify-center gap-2"
+                          >
+                            <span>🎨 Canva'da Şablonu Aç</span>
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </a>
+                          
+                          <button
+                            onClick={() => setCanvaRehberiAcik(true)}
+                            className="bg-white/5 hover:bg-white/10 text-gray-300 font-semibold text-xs py-3.5 px-4 rounded-xl border border-white/5 active:scale-[0.98] transition-all"
+                          >
+                            Nasıl Yapılır? 💡
+                          </button>
                         </div>
-                        <p className="text-[11px] text-gray-400 leading-normal">
-                          View the compiled Canva design workspace directly to review spacing, text layers, colors, and layout positioning.
-                        </p>
-                      </a>
+
+                        {/* CanvaRehberi Component Injection */}
+                        <CanvaRehberi isOpen={canvaRehberiAcik} onClose={() => setCanvaRehberiAcik(false)} />
+                      </GlassCard>
+
+                      {/* Step 2: Paste the template Link */}
+                      <GlassCard hoverGlow={false} className="space-y-5 p-5">
+                        <div className="space-y-1">
+                          <span className="text-[10px] font-extrabold text-emerald-400 uppercase tracking-widest font-mono block">Adım 2 — Şablon Kopyalama Bağlantısı</span>
+                          <h4 className="text-base font-bold text-white">Müşteri Şablon Bağlantısını Kaydet</h4>
+                          <p className="text-xs text-gray-400">
+                            Canva'da "Paylaş → Şablon olarak kullan linki" seçeneğinden kopyaladığınız `/copy` bağlantısını buraya yapıştırıp kaydedin.
+                          </p>
+                        </div>
+
+                        <div className="space-y-3">
+                          <div className="flex flex-col sm:flex-row gap-2">
+                            <input
+                              type="text"
+                              value={inputTemplateLink}
+                              onChange={(e) => setInputTemplateLink(e.target.value)}
+                              placeholder="https://www.canva.com/design/.../copy"
+                              className="flex-1 bg-black/60 border border-white/10 rounded-xl px-4 py-3 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 transition-colors"
+                            />
+                            
+                            <button
+                              onClick={() => handleSaveTemplateLink(inputTemplateLink)}
+                              disabled={savingLink || !inputTemplateLink.includes('canva.com')}
+                              className="bg-emerald-500 hover:bg-emerald-400 disabled:bg-white/5 text-black disabled:text-gray-500 font-bold text-xs uppercase tracking-wider py-3 px-5 rounded-xl transition-all active:scale-[0.98] shrink-0 disabled:scale-100 flex items-center justify-center gap-1.5"
+                            >
+                              {savingLink ? 'Kaydediliyor...' : 'Bağlantıyı Kaydet ✓'}
+                            </button>
+                          </div>
+
+                          {/* Link Saved Success State Indicator */}
+                          {canvaProject.templateLink && canvaProject.templateLink.includes('/copy') ? (
+                            <div className="bg-emerald-500/5 border border-emerald-500/10 rounded-xl p-3 flex items-center justify-between gap-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs">✅</span>
+                                <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider font-mono">
+                                  Şablon Linki Aktif & Kaydedildi
+                                </span>
+                              </div>
+                              
+                              <div className="flex items-center gap-2 shrink-0">
+                                <button
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(canvaProject.templateLink);
+                                    alert('Link panoya kopyalandı!');
+                                  }}
+                                  className="text-[9px] font-bold uppercase tracking-wider text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 py-1 px-3 rounded-lg border border-white/5 transition-all"
+                                >
+                                  Kopyala
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setInputTemplateLink('');
+                                  }}
+                                  className="text-[9px] font-bold uppercase tracking-wider text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 py-1 px-3 rounded-lg border border-white/5 transition-all"
+                                >
+                                  Değiştir
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="bg-yellow-500/5 border border-yellow-500/10 rounded-xl p-3">
+                              <p className="text-[10px] text-yellow-500/70 leading-relaxed text-center sm:text-left">
+                                ⚠️ Henüz şablon kopyalama bağlantısı kaydedilmedi. Müşterilere teslimat linki sunmak için bağlantıyı girmelisiniz.
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </GlassCard>
                     </div>
 
+                    {/* Step 3: Etsy SEO Copywriting Generator */}
+                    {canvaProject.templateLink && (
+                      <div className="animate-in fade-in slide-in-from-bottom-3 duration-500">
+                        <div className="bg-gradient-to-r from-purple-950/20 to-indigo-950/20 border border-purple-500/15 rounded-3xl p-6 sm:p-8 space-y-6">
+                          
+                          {/* Header section */}
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/5 pb-4">
+                            <div className="space-y-1">
+                              <span className="text-[10px] font-extrabold text-purple-400 uppercase tracking-widest font-mono block">Adım 3 — Satış Asistanı</span>
+                              <h3 className="text-lg font-bold text-white">🛍️ Etsy SEO Listing Üretici (AI-Powered)</h3>
+                              <p className="text-xs text-gray-400">
+                                Canva kopyalama bağlantınız hazır! Şimdi AI gücüyle Etsy mağazanızda hemen satışa sunabileceğiniz SEO başlığını, açıklamasını ve 13 adet etiketi anında oluşturun.
+                              </p>
+                            </div>
+                            
+                            <button
+                              onClick={() => handleGenerateEtsyListing(canvaProject.templateLink)}
+                              disabled={generatingEtsyListing}
+                              className="bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs uppercase tracking-wider py-3.5 px-6 rounded-xl shadow-lg shadow-purple-500/20 hover:shadow-purple-500/30 active:scale-[0.98] transition-all disabled:opacity-50 shrink-0 self-start sm:self-auto"
+                            >
+                              {generatingEtsyListing ? 'AI Hazırlıyor...' : 'Etsy Listing Metinlerini Üret ✨'}
+                            </button>
+                          </div>
+
+                          {/* Listing Results Showcase */}
+                          {etsyListingCopy ? (
+                            <div className="space-y-5 animate-in fade-in slide-in-from-top-4 duration-500">
+                              
+                              {/* 1. SEO Title card */}
+                              <div className="bg-black/40 border border-white/5 rounded-2xl p-4 sm:p-5 space-y-3">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-[10px] font-bold text-purple-400 uppercase tracking-wider font-mono">1. SEO Optimize Etsy Ürün Başlığı (Title)</span>
+                                  <button
+                                    onClick={() => handleCopyEtsyField(etsyListingCopy.title, 'title')}
+                                    className="bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white text-[10px] font-bold uppercase tracking-wider px-3.5 py-1.5 rounded-lg border border-white/5 transition-all flex items-center gap-1.5"
+                                  >
+                                    {copiedEtsyField === 'title' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-gray-450" />}
+                                    <span>{copiedEtsyField === 'title' ? 'Kopyalandı!' : 'Kopyala'}</span>
+                                  </button>
+                                </div>
+                                <p className="text-sm font-semibold text-white bg-black/30 p-3.5 rounded-xl border border-white/5 leading-relaxed">
+                                  {etsyListingCopy.title}
+                                </p>
+                              </div>
+
+                              {/* 2. Description and Tags columns */}
+                              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                                
+                                {/* Description Box */}
+                                <div className="bg-black/40 border border-white/5 rounded-2xl p-4 sm:p-5 flex flex-col space-y-3">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-[10px] font-bold text-purple-400 uppercase tracking-wider font-mono">2. Etsy Ürün Açıklaması (Description)</span>
+                                    <button
+                                      onClick={() => handleCopyEtsyField(etsyListingCopy.description, 'desc')}
+                                      className="bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white text-[10px] font-bold uppercase tracking-wider px-3.5 py-1.5 rounded-lg border border-white/5 transition-all flex items-center gap-1.5"
+                                    >
+                                      {copiedEtsyField === 'desc' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-gray-450" />}
+                                      <span>{copiedEtsyField === 'desc' ? 'Kopyalandı!' : 'Kopyala'}</span>
+                                    </button>
+                                  </div>
+                                  <textarea
+                                    readOnly
+                                    value={etsyListingCopy.description}
+                                    className="flex-1 min-h-[250px] text-xs text-gray-300 font-mono bg-black/35 p-4 rounded-xl border border-white/5 focus:outline-none leading-relaxed resize-none scrollbar-thin"
+                                  />
+                                </div>
+
+                                {/* Tags & Pricing Box */}
+                                <div className="space-y-5 flex flex-col">
+                                  
+                                  {/* Tags card */}
+                                  <div className="bg-black/40 border border-white/5 rounded-2xl p-4 sm:p-5 space-y-3 flex-1">
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-[10px] font-bold text-purple-400 uppercase tracking-wider font-mono">3. Etsy Arama Etiketleri (13 Tags)</span>
+                                      <button
+                                        onClick={() => handleCopyEtsyField(etsyListingCopy.tags, 'tags')}
+                                        className="bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white text-[10px] font-bold uppercase tracking-wider px-3.5 py-1.5 rounded-lg border border-white/5 transition-all flex items-center gap-1.5"
+                                      >
+                                        {copiedEtsyField === 'tags' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-gray-450" />}
+                                        <span>{copiedEtsyField === 'tags' ? 'Kopyalandı!' : 'Kopyala'}</span>
+                                      </button>
+                                    </div>
+                                    
+                                    <p className="text-xs text-gray-300 bg-black/30 p-3.5 rounded-xl border border-white/5 leading-relaxed font-mono">
+                                      {etsyListingCopy.tags}
+                                    </p>
+                                    
+                                    <div className="flex flex-wrap gap-1.5 pt-2">
+                                      {etsyListingCopy.tags.split(',').map((tag: string, tid: number) => (
+                                        <span key={tid} className="text-[10px] font-medium text-purple-300/80 bg-purple-500/5 border border-purple-500/10 py-1 px-2.5 rounded-lg">
+                                          {tag.trim()}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+
+                                  {/* Pricing suggestion */}
+                                  <div className="bg-black/40 border border-white/5 rounded-2xl p-4 sm:p-5 space-y-2.5">
+                                    <span className="text-[10px] font-bold text-purple-400 uppercase tracking-wider font-mono block">4. Önerilen Liste Satış Fiyatı (USD)</span>
+                                    <div className="flex items-center justify-between bg-black/30 p-4 rounded-xl border border-white/5">
+                                      <span className="text-2xl font-black text-emerald-400 font-mono">${etsyListingCopy.price || '14.99'}</span>
+                                      <span className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">Rekabet Analizine Göre Önerilen Fiyat</span>
+                                    </div>
+                                  </div>
+
+                                </div>
+                              </div>
+
+                              {/* Delivery PDF generation note */}
+                              <div className="bg-white/5 border border-white/10 rounded-2xl p-4 text-xs text-gray-400 leading-relaxed text-center">
+                                🎉 Etsy listing hazır! Şimdi <strong className="text-white">"Download Package"</strong> sekmesine giderek müşterilerinize satın alma sonrası sunacağınız şık teslimat PDF'ini anında indirin!
+                              </div>
+
+                            </div>
+                          ) : (
+                            <div className="border border-dashed border-white/10 rounded-2xl py-12 text-center text-gray-500">
+                              <Sparkles className="w-8 h-8 text-gray-600 mx-auto mb-2" />
+                              <p className="text-xs">Şablon linki girildikten sonra Etsy Listing detaylarınızı AI yardımıyla anında üretin.</p>
+                            </div>
+                          )}
+                          
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Technical details accordion block */}
                     {canvaProject.layoutRecipe && (
                       <div className="mt-4 p-5 bg-slate-950/40 border border-white/5 rounded-2xl space-y-3">
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/5 pb-2">
@@ -974,7 +1244,7 @@ Etsy Section Categories: ${shopBranding?.categorySuggestions?.join(', ') || ''}
                         </pre>
                       </div>
                     )}
-                  </GlassCard>
+                  </div>
                 ) : (
                   <GlassCard hoverGlow={false} className="text-center py-12">
                     <ExternalLink className="w-12 h-12 text-gray-600 mx-auto mb-3" />
