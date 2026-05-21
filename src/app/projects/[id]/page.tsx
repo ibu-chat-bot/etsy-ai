@@ -62,6 +62,8 @@ export default function ProjectDetailPage({
   const [etsyListingCopy, setEtsyListingCopy] = useState<any | null>(null);
   const [generatingEtsyListing, setGeneratingEtsyListing] = useState(false);
   const [copiedEtsyField, setCopiedEtsyField] = useState<string | null>(null);
+  const [generatedTestLink, setGeneratedTestLink] = useState('');
+  const [generatingTestLink, setGeneratingTestLink] = useState(false);
   const [generatedAssets, setGeneratedAssets] = useState<any[]>([]);
   const [generatingImages, setGeneratingImages] = useState(false);
   const [generatingMockups, setGeneratingMockups] = useState(false);
@@ -427,6 +429,31 @@ Etsy Section Categories: ${shopBranding?.categorySuggestions?.join(', ') || ''}
     navigator.clipboard.writeText(text);
     setCopiedEtsyField(fieldName);
     setTimeout(() => setCopiedEtsyField(null), 2000);
+  };
+
+  const handleGenerateTestLink = async () => {
+    setGeneratingTestLink(true);
+    try {
+      const res = await fetch('/api/purchase', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          templateId: 'beauty-promo', // Fallback template
+          purchaseId: 'TEST_' + Math.random().toString(36).substring(2, 9).toUpperCase(),
+          buyerEmail: 'test-user@etsyai.com'
+        })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setGeneratedTestLink(data.editorLink);
+      } else {
+        alert(data.error || 'Test linki üretilemedi.');
+      }
+    } catch (err: any) {
+      alert(`Hata: ${err.message}`);
+    } finally {
+      setGeneratingTestLink(false);
+    }
   };
 
   const handleGenerateMockups = async () => {
@@ -1206,6 +1233,54 @@ Etsy Section Categories: ${shopBranding?.categorySuggestions?.join(', ') || ''}
                         </div>
                       </div>
                     )}
+
+                    {/* Antigravity Browser-Based Editor Test Widget */}
+                    <div className="bg-slate-950/40 border border-emerald-500/20 hover:border-emerald-500/30 rounded-3xl p-5 sm:p-6 space-y-4 transition-all">
+                      <div className="flex items-start gap-4">
+                        <div className="w-10 h-10 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-lg shrink-0">
+                          ✨
+                        </div>
+                        <div className="space-y-1">
+                          <span className="text-[10px] font-extrabold text-emerald-400 uppercase tracking-widest font-mono block">
+                            Yeni Özellik: Antigravity Bağımsız Editör
+                          </span>
+                          <h4 className="text-sm font-bold text-white">Canva Harici Tarayıcıda Düzenleyiciyi Deneyin</h4>
+                          <p className="text-xs text-gray-400 leading-relaxed">
+                            Müşterilerinizin Canva hesabı açmasına gerek kalmadan, doğrudan tarayıcılarında düzenleme yapıp PNG indirebilecekleri bağımsız stüdyoyu hemen test edin.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col sm:flex-row gap-3 items-stretch pt-2">
+                        <button
+                          onClick={handleGenerateTestLink}
+                          disabled={generatingTestLink}
+                          className="bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs uppercase tracking-wider py-3.5 px-6 rounded-xl transition-all active:scale-[0.98] shrink-0 disabled:opacity-50 flex items-center justify-center gap-1.5 cursor-pointer"
+                        >
+                          {generatingTestLink ? 'Bağlantı Üretiliyor...' : 'Bağlantı Üret & Düzenleyiciyi Başlat 🚀'}
+                        </button>
+
+                        {generatedTestLink && (
+                          <div className="flex-1 flex gap-2 items-center min-w-0">
+                            <input
+                              type="text"
+                              readOnly
+                              value={generatedTestLink}
+                              className="flex-1 bg-black/60 border border-white/10 rounded-xl px-4 py-3 text-xs text-emerald-400 font-mono focus:outline-none truncate"
+                            />
+                            <a
+                              href={generatedTestLink}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="bg-white/5 hover:bg-white/10 text-white font-bold text-xs py-3.5 px-5 rounded-xl border border-white/5 text-center active:scale-[0.98] transition-all shrink-0 flex items-center justify-center gap-1"
+                            >
+                              <span>Aç</span>
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                          </div>
+                        )}
+                      </div>
+                    </div>
 
                     {/* Technical details accordion block */}
                     {canvaProject.layoutRecipe && (

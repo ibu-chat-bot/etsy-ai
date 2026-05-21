@@ -92,7 +92,8 @@ async function readLocalDB(): Promise<LocalDB> {
             settings: parsed.settings || DEFAULT_DB.settings,
             canva_connections: parsed.canva_connections || [],
             canva_projects: parsed.canva_projects || [],
-            generated_assets: parsed.generated_assets || []
+            generated_assets: parsed.generated_assets || [],
+            editor_tokens: parsed.editor_tokens || []
           };
         }
       }
@@ -115,7 +116,8 @@ async function readLocalDB(): Promise<LocalDB> {
       settings: parsed.settings || DEFAULT_DB.settings,
       canva_connections: parsed.canva_connections || [],
       canva_projects: parsed.canva_projects || [],
-      generated_assets: parsed.generated_assets || []
+      generated_assets: parsed.generated_assets || [],
+      editor_tokens: parsed.editor_tokens || []
     };
   } catch (error) {
     // If file doesn't exist, create it from DEFAULT_DB

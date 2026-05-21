@@ -221,7 +221,7 @@ Language: ${language === 'tr' ? 'Turkish' : 'English'}`
   // 7. MOCKUP PROMPT GENERATOR
   async generateMockupPrompts(name: string, niche: string, style: string, language: 'en' | 'tr') {
     const client = await getOpenAIClient();
-    if (!client) return this.getMockMockupPrompts(language);
+    if (!client) return this.getMockMockupPrompts(language).prompts;
 
     try {
       const response = await client.chat.completions.create({
@@ -246,7 +246,7 @@ Language: ${language === 'tr' ? 'Turkish' : 'English'}`
       return parsed.prompts || this.getMockMockupPrompts(language).prompts;
     } catch (err) {
       console.warn('OpenAI Mockup Prompts failed, falling back to mock:', err);
-      return this.getMockMockupPrompts(language);
+      return this.getMockMockupPrompts(language).prompts;
     }
   },
 
