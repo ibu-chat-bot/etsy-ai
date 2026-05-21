@@ -49,6 +49,7 @@ export default function ProjectDetailPage({
   const [regenerating, setRegenerating] = useState<string | null>(null);
   const [copiedColor, setCopiedColor] = useState<string | null>(null);
   const [copiedText, setCopiedText] = useState<string | null>(null);
+  const [copiedJSON, setCopiedJSON] = useState(false);
 
   // Automation Pipeline States
   const [canvaBuilding, setCanvaBuilding] = useState(false);
@@ -124,6 +125,25 @@ export default function ProjectDetailPage({
     navigator.clipboard.writeText(hex);
     setCopiedColor(hex);
     setTimeout(() => setCopiedColor(null), 2000);
+  };
+
+  // JSON Recipe Copier & Downloader
+  const handleCopyJSON = (recipe: string) => {
+    navigator.clipboard.writeText(recipe);
+    setCopiedJSON(true);
+    setTimeout(() => setCopiedJSON(false), 2000);
+  };
+
+  const handleDownloadJSON = (recipe: string) => {
+    const blob = new Blob([recipe], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'layout-recipe.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   // Duplicator
@@ -920,12 +940,35 @@ Etsy Section Categories: ${shopBranding?.categorySuggestions?.join(', ') || ''}
 
                     {canvaProject.layoutRecipe && (
                       <div className="mt-4 p-5 bg-slate-950/40 border border-white/5 rounded-2xl space-y-3">
-                        <span className="text-[10px] font-extrabold text-purple-400 uppercase tracking-widest font-mono block">
-                          Programmatic Multi-Page Layout coordinates Recipe JSON
-                        </span>
-                        <p className="text-[11px] text-gray-400">
-                          Below is the auto-compiled coordinate configuration mapping typography fonts, spacing grids, page loops, color systems, and text bounds for your 100% editable Canva template set:
-                        </p>
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/5 pb-2">
+                          <div>
+                            <span className="text-[10px] font-extrabold text-purple-400 uppercase tracking-widest font-mono block">
+                              Programmatic Multi-Page Layout coordinates Recipe JSON
+                            </span>
+                            <p className="text-[11px] text-gray-400 mt-0.5">
+                              100% complete layout coordinate configuration recipe mapping brand styling rules:
+                            </p>
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-2 shrink-0">
+                            <button
+                              onClick={() => handleCopyJSON(canvaProject.layoutRecipe)}
+                              className="bg-purple-500/10 hover:bg-purple-500/15 text-purple-300 hover:text-white font-bold text-[10px] uppercase tracking-wider px-3.5 py-2 rounded-xl border border-purple-500/20 active:scale-[0.98] transition-all flex items-center gap-1.5"
+                            >
+                              {copiedJSON ? <CheckCircle2 className="w-3.5 h-3.5 text-purple-400" /> : <Copy className="w-3.5 h-3.5 text-purple-450" />}
+                              <span>{copiedJSON ? 'Copied!' : 'Copy Layout JSON'}</span>
+                            </button>
+
+                            <button
+                              onClick={() => handleDownloadJSON(canvaProject.layoutRecipe)}
+                              className="bg-indigo-500/10 hover:bg-indigo-500/15 text-indigo-300 hover:text-white font-bold text-[10px] uppercase tracking-wider px-3.5 py-2 rounded-xl border border-indigo-500/20 active:scale-[0.98] transition-all flex items-center gap-1.5"
+                            >
+                              <Download className="w-3.5 h-3.5 text-indigo-400" />
+                              <span>Download JSON</span>
+                            </button>
+                          </div>
+                        </div>
+
                         <pre className="text-[10px] text-gray-300 font-mono bg-black/60 p-4 rounded-xl max-h-[300px] overflow-y-auto border border-gray-900 scrollbar-thin leading-normal">
                           {canvaProject.layoutRecipe}
                         </pre>

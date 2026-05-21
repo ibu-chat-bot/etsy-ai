@@ -29,6 +29,20 @@ async function logCanvaResponse(res: Response, endpoint: string): Promise<any> {
   return { ok: res.ok, status: res.status, data };
 }
 
+async function getBase64Image(url: string): Promise<string> {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const arrayBuffer = await res.arrayBuffer();
+    const contentType = res.headers.get('content-type') || 'image/jpeg';
+    const base64 = Buffer.from(arrayBuffer).toString('base64');
+    return `data:${contentType};base64,${base64}`;
+  } catch (err: any) {
+    console.error(`[Canva Base64 Convert] ❌ Failed for URL: ${url} - Error: ${err.message}`);
+    return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+  }
+}
+
 // ─── Canva Client ────────────────────────────────────────────────────────────
 
 export class CanvaClient {
@@ -41,6 +55,27 @@ export class CanvaClient {
       clientSecret: settings.canvaClientSecret || '',
       redirectUri: settings.canvaRedirectUri || ''
     };
+  }
+
+  private getRedirectUri(configuredUri?: string, requestUrl?: string): string {
+    if (configuredUri && !configuredUri.includes(':3001') && !configuredUri.includes('localhost')) {
+      return configuredUri;
+    }
+    if (process.env.NEXT_PUBLIC_CANVA_REDIRECT_URI) {
+      return process.env.NEXT_PUBLIC_CANVA_REDIRECT_URI;
+    }
+    if (process.env.NEXT_PUBLIC_APP_URL) {
+      return `${process.env.NEXT_PUBLIC_APP_URL}/api/canva/callback`;
+    }
+    if (requestUrl) {
+      try {
+        const origin = new URL(requestUrl).origin;
+        return `${origin}/api/canva/callback`;
+      } catch {
+        // ignore
+      }
+    }
+    return 'http://127.0.0.1:3000/api/canva/callback';
   }
 
   // ─── OAuth ─────────────────────────────────────────────────────────────────
@@ -59,21 +94,7 @@ export class CanvaClient {
       );
     }
 
-    // Use a sane default redirect URI if none configured or if it points to wrong port or contains localhost.
-    let finalRedirectUri = redirectUri;
-    if (!finalRedirectUri || finalRedirectUri.includes(':3001') || finalRedirectUri.includes('localhost')) {
-      if (requestUrl) {
-        try {
-          const origin = new URL(requestUrl).origin;
-          finalRedirectUri = `${origin}/api/canva/callback`;
-        } catch {
-          finalRedirectUri = 'http://127.0.0.1:3000/api/canva/callback';
-        }
-      } else {
-        finalRedirectUri = 'http://127.0.0.1:3000/api/canva/callback';
-      }
-      console.warn('[Canva Auth] Using fallback redirect URI:', finalRedirectUri);
-    }
+    const finalRedirectUri = this.getRedirectUri(redirectUri, requestUrl);
 
     const scopes = [
       'design:content:write',
@@ -120,21 +141,7 @@ export class CanvaClient {
       );
     }
 
-    // Apply fallback redirect URI logic
-    let finalRedirectUri = redirectUri;
-    if (!finalRedirectUri || finalRedirectUri.includes(':3001') || finalRedirectUri.includes('localhost')) {
-      if (requestUrl) {
-        try {
-          const origin = new URL(requestUrl).origin;
-          finalRedirectUri = `${origin}/api/canva/callback`;
-        } catch {
-          finalRedirectUri = 'http://127.0.0.1:3000/api/canva/callback';
-        }
-      } else {
-        finalRedirectUri = 'http://127.0.0.1:3000/api/canva/callback';
-      }
-      console.warn('[Canva Auth] Using fallback redirect URI for token exchange:', finalRedirectUri);
-    }
+    const finalRedirectUri = this.getRedirectUri(redirectUri, requestUrl);
 
     // Define token endpoint
     const endpoint = `https://api.canva.com/rest/v1/oauth/token`;
@@ -557,7 +564,6 @@ export class CanvaClient {
     const headerDefs = `
       <defs>
         <style>
-          @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;1,400&amp;family=Inter:wght@400;500;600;700&amp;family=Montserrat:wght@400;600;700&amp;display=swap');
           .svg-heading {
             font-family: "${headingFont}", "Playfair Display", Georgia, serif;
             font-weight: 700;
@@ -769,6 +775,9 @@ export class CanvaClient {
 
       console.log(`[Canva] Generating vector SVG layout for slide ${i + 1}: "${bp.purpose || 'Template'}"`);
 
+      // Asynchronously download and convert image to self-contained Base64 Data URI
+      const base64Image = await getBase64Image(imageUrl);
+
       const svgString = this.generateSlideSvg({
         width,
         height,
@@ -776,7 +785,7 @@ export class CanvaClient {
         headline: bp.textHierarchy || bp.purpose || 'Premium Digital Graphics',
         cta: bp.cta || 'Edit Template',
         purpose: bp.purpose || `Slide ${i + 1}`,
-        imageUrl,
+        imageUrl: base64Image,
         colors,
         headingFont,
         bodyFont
