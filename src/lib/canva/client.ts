@@ -866,16 +866,19 @@ export class CanvaClient {
             const fbResult = await logCanvaResponse(fbRes, endpoint);
             if (fbResult.ok) {
               const d = fbResult.data?.design || fbResult.data;
+              const designId = d.id;
+              const templateLink = `https://www.canva.com/design/${designId}/copy`;
+              const viewUrl = `https://www.canva.com/design/${designId}/view`;
               const sd: SlideDesign = {
                 slideNumber: i + 1, purpose: bp.purpose || `Slide ${i + 1}`,
                 headline: bp.textHierarchy || '', cta: bp.cta || '',
-                designId: d.id,
-                editUrl: d.urls?.edit_url || `https://www.canva.com/design/${d.id}/edit`,
-                viewUrl: d.urls?.view_url || `https://www.canva.com/design/${d.id}/view`,
+                designId: designId,
+                editUrl: templateLink,
+                viewUrl: viewUrl,
                 assetId: '', backgroundHex: bgHex
               };
               slideDesigns.push(sd);
-              if (!primaryDesignId) { primaryDesignId = sd.designId; primaryEditUrl = sd.editUrl; primaryViewUrl = sd.viewUrl; }
+              if (!primaryDesignId) { primaryDesignId = sd.designId; primaryEditUrl = templateLink; primaryViewUrl = viewUrl; }
             }
           }
           continue;
@@ -884,19 +887,20 @@ export class CanvaClient {
         const design = data?.design || data;
         if (!design?.id) { console.error(`[Canva] ❌ Slide ${i + 1}: no design.id in response`); continue; }
 
-        const eUrl = design.urls?.edit_url || `https://www.canva.com/design/${design.id}/edit`;
-        const vUrl = design.urls?.view_url || `https://www.canva.com/design/${design.id}/view`;
+        const designId = design.id;
+        const templateLink = `https://www.canva.com/design/${designId}/copy`;
+        const viewUrl = `https://www.canva.com/design/${designId}/view`;
 
         const sd: SlideDesign = {
           slideNumber: i + 1, purpose: bp.purpose || `Slide ${i + 1}`,
           headline: bp.textHierarchy || '', cta: bp.cta || '',
-          designId: design.id, editUrl: eUrl, viewUrl: vUrl,
+          designId: designId, editUrl: templateLink, viewUrl: viewUrl,
           assetId: assetId || '', backgroundHex: bgHex
         };
         slideDesigns.push(sd);
-        if (!primaryDesignId) { primaryDesignId = sd.designId; primaryEditUrl = eUrl; primaryViewUrl = vUrl; }
+        if (!primaryDesignId) { primaryDesignId = sd.designId; primaryEditUrl = templateLink; primaryViewUrl = viewUrl; }
 
-        console.log(`[Canva] ✅ Slide design ${i + 1} successfully created: ${design.id}`);
+        console.log(`[Canva] ✅ Slide design ${i + 1} successfully created: ${designId}`);
       } catch (err: any) {
         console.error(`[Canva] ❌ Exception in slide ${i + 1} creation: ${err.message}`);
       }
