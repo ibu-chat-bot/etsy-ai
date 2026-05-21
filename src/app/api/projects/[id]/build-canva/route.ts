@@ -58,35 +58,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     console.log(`[Build Canva] Blueprints: ${blueprints.length}, Image assets: ${imageAssets.length}`);
 
-    // Upload image assets (non-fatal)
-    for (let i = 0; i < imageAssets.length; i++) {
-      try {
-        const uploaded = await canvaClient.uploadAsset(
-          token,
-          imageAssets[i].fileUrl,
-          `${project.name.replace(/\s+/g, '-')}-Slide-${i + 1}.png`
-        );
-        console.log(`[Build Canva] Uploaded asset ${i + 1}: ${uploaded.assetId}`);
-      } catch (uploadErr: any) {
-        console.error(`[Build Canva] Asset upload ${i + 1} failed (non-fatal):`, uploadErr.message);
-      }
-    }
-
-    const effectiveBlueprints = blueprints.length > 0
-      ? blueprints
-      : Array.from({ length: project.templateCount || 5 }, (_, idx) => ({
-          templateNumber: idx + 1,
-          purpose: 'Etsy Social Media Graphic Slide',
-          layoutStructure: 'Minimal Grid Composition',
-          textHierarchy: 'Header Text Overlay',
-          cta: 'Click to edit in Canva'
-        }));
-
+    // createMultiPageDesign now handles asset uploads + per-slide design creation internally
     const result = await canvaClient.createMultiPageDesign(
       token,
       project,
       visual,
-      effectiveBlueprints,
+      blueprints,
       imageAssets
     );
 

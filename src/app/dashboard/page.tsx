@@ -27,6 +27,7 @@ export default function DashboardPage() {
   const [canvaConnected, setCanvaConnected] = useState(false);
   const [canvaWorkspaceId, setCanvaWorkspaceId] = useState('');
   const [storageType, setStorageType] = useState('database');
+  const [mounted, setMounted] = useState(false);
 
   // Load Projects
   const loadProjects = async () => {
@@ -60,6 +61,7 @@ export default function DashboardPage() {
   };
 
   useEffect(() => {
+    setMounted(true);
     loadProjects();
     loadCanvaStatus();
   }, []);
@@ -173,7 +175,7 @@ export default function DashboardPage() {
               <FolderGit2 className="w-5 h-5 text-emerald-400" />
             </div>
             <div className="text-3xl font-black text-white">{loading ? '...' : totalProjects}</div>
-            <p className="text-[10px] text-gray-500 mt-1 font-medium">Packages stored on {storageType}</p>
+            <p className="text-[10px] text-gray-500 mt-1 font-medium">Packages stored on {mounted ? storageType : 'Loading...'}</p>
           </GlassCard>
 
           <GlassCard hoverGlow={false} className="relative overflow-hidden py-5 px-6">

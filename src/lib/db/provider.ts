@@ -1,11 +1,13 @@
 import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import { Project, SEOAssets, VisualSystem, ContentBlueprint, PromptOutput, Settings, User, CanvaConnection, CanvaProject, GeneratedAsset } from '@/types';
+import fs from 'fs/promises';
+import path from 'path';
 
 // Detect if Supabase is configured via environment variables
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-const isSupabaseConfigured = supabaseUrl && supabaseKey;
+const isSupabaseConfigured = !!(supabaseUrl && supabaseKey);
 
 const supabase = isSupabaseConfigured ? createClient(supabaseUrl, supabaseKey) : null;
 
@@ -59,7 +61,10 @@ const kvUrl = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL 
 const kvToken = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN || '';
 const isKvConfigured = !!(kvUrl && kvToken);
 
-// In-memory fallback DB state (cleared when serverless instances reset, which is fine for fallback)
+// Path to persistent local JSON database
+const LOCAL_DB_PATH = path.join(process.cwd(), 'local-db.json');
+
+// In-memory fallback DB state (used ONLY if file operations fail)
 let localDBInMemory: LocalDB = JSON.parse(JSON.stringify(DEFAULT_DB));
 
 // Helper: Read local DB
@@ -92,7 +97,32 @@ async function readLocalDB(): Promise<LocalDB> {
       console.error('Failed to read from Vercel KV / Redis:', error);
     }
   }
-  return localDBInMemory;
+
+  // File-based persistent local storage
+  try {
+    const fileContent = await fs.readFile(LOCAL_DB_PATH, 'utf-8');
+    const parsed = JSON.parse(fileContent);
+    return {
+      users: parsed.users || DEFAULT_DB.users,
+      projects: parsed.projects || [],
+      seo_assets: parsed.seo_assets || [],
+      visual_systems: parsed.visual_systems || [],
+      content_blueprints: parsed.content_blueprints || [],
+      prompt_outputs: parsed.prompt_outputs || [],
+      settings: parsed.settings || DEFAULT_DB.settings,
+      canva_connections: parsed.canva_connections || [],
+      canva_projects: parsed.canva_projects || [],
+      generated_assets: parsed.generated_assets || []
+    };
+  } catch (error) {
+    // If file doesn't exist, create it from DEFAULT_DB
+    try {
+      await fs.writeFile(LOCAL_DB_PATH, JSON.stringify(DEFAULT_DB, null, 2), 'utf-8');
+    } catch (writeErr) {
+      console.warn('Could not write initial local-db.json file:', writeErr);
+    }
+    return DEFAULT_DB;
+  }
 }
 
 // Helper: Write local DB
@@ -113,6 +143,13 @@ async function writeLocalDB(data: LocalDB): Promise<void> {
       console.error('Failed to write to Vercel KV / Redis:', error);
     }
   }
+
+  // File-based persistent local storage
+  try {
+    await fs.writeFile(LOCAL_DB_PATH, JSON.stringify(data, null, 2), 'utf-8');
+  } catch (error) {
+    console.error('Failed to write to local-db.json file:', error);
+  }
 }
 
 /* ==========================================================================
@@ -122,9 +159,12 @@ async function writeLocalDB(data: LocalDB): Promise<void> {
 export const db = {
   isSupabase: () => !!isSupabaseConfigured,
   getStorageType: () => {
-    if (isSupabaseConfigured) return 'Supabase';
-    if (isKvConfigured) return 'Vercel KV / Redis';
-    return 'In-Memory Fallback';
+    if (isSupabaseConfigured) return 'Supabase Persistent Storage';
+    if (isKvConfigured) return 'Vercel KV / Upstash Redis Persistent Store';
+    if (process.env.VERCEL === '1') {
+      return 'EPHEMERAL WARNING: In-Memory Fallback (Configure Vercel KV or Supabase env vars!)';
+    }
+    return 'Persistent local-db.json';
   },
 
   // --- SETTINGS ---
