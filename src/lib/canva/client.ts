@@ -267,12 +267,9 @@ export class CanvaClient {
     const endpoint = `${this.BASE_URL}/designs`;
 
     const body: Record<string, unknown> = {
-      type: 'type_and_asset',
-      design_type: {
-        type: 'custom',
-        width,
-        height
-      }
+      type: 'custom',
+      width,
+      height
     };
     if (title) body.title = title;
 
@@ -834,12 +831,14 @@ export class CanvaClient {
         // Create design pre-loaded with the uploaded SVG asset
         const body: Record<string, unknown> = assetId
           ? {
-              design_type: { type: 'custom', width, height },
+              type: 'type_and_asset',
               asset_id: assetId,
               title: slideTitle
             }
           : {
-              design_type: { type: 'custom', width, height },
+              type: 'custom',
+              width,
+              height,
               title: slideTitle
             };
 
@@ -859,7 +858,9 @@ export class CanvaClient {
           if (assetId) {
             console.log(`[Canva] Retrying slide ${i + 1} as blank template fallback...`);
             const fbBody = {
-              design_type: { type: 'custom', width, height },
+              type: 'custom',
+              width,
+              height,
               title: slideTitle
             };
             const fbRes = await fetch(endpoint, {
